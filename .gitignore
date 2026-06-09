@@ -1,0 +1,9 @@
+# OS
+Thumbs.db
+.DS_Store
+
+# Editores
+.vscode/
+.idea/
+
+# Nada de Python/secretos aquí — este repo es 100% estático
