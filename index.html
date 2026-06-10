@@ -4,6 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>English Flashcards</title>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <style>
     :root {
       --bg: #0f0f1a;
@@ -391,9 +392,197 @@
       to   { opacity: 1; transform: translateY(0); }
     }
     .fade-in { animation: fadeIn 0.4s ease forwards; }
+
+    /* ── User badge (top-right) ── */
+    .user-badge {
+      position: fixed;
+      top: 1rem; right: 1rem;
+      display: flex;
+      align-items: center;
+      gap: 0.6rem;
+      background: #15152e;
+      border: 1px solid var(--border);
+      border-radius: 99px;
+      padding: 0.35rem 0.35rem 0.35rem 0.9rem;
+      z-index: 500;
+      font-size: 0.82rem;
+    }
+    .user-badge .user-email { color: var(--text); max-width: 150px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .user-avatar {
+      width: 30px; height: 30px; border-radius: 50%;
+      background: linear-gradient(135deg,#7c3aed,#a855f7);
+      display: flex; align-items: center; justify-content: center;
+      font-weight: 800; color: #fff; font-size: 0.85rem;
+    }
+    .btn-logout {
+      background: var(--card-front); border: 1px solid var(--border);
+      color: var(--text-muted); border-radius: 99px;
+      padding: 0.3rem 0.7rem; font-size: 0.75rem; font-weight: 600; cursor: pointer;
+      transition: all 0.2s;
+    }
+    .btn-logout:hover { background: rgba(239,68,68,0.15); color: #f87171; border-color: rgba(239,68,68,0.3); }
+
+    /* ── Auth screen ── */
+    .auth-overlay {
+      position: fixed; inset: 0;
+      background: var(--bg);
+      display: flex; align-items: center; justify-content: center;
+      z-index: 2000; padding: 1rem;
+    }
+    .auth-card {
+      background: #13132b;
+      border: 1px solid var(--border);
+      border-radius: 24px;
+      padding: 2.25rem 2rem;
+      width: 100%; max-width: 400px;
+      text-align: center;
+      animation: fadeIn 0.4s ease;
+    }
+    .auth-logo { font-size: 2.4rem; margin-bottom: 0.4rem; }
+    .auth-title {
+      font-size: 1.5rem; font-weight: 800; margin-bottom: 0.3rem;
+      background: linear-gradient(135deg,#a855f7,#7c3aed);
+      -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+    }
+    .auth-sub { color: var(--text-muted); font-size: 0.85rem; margin-bottom: 1.5rem; }
+
+    .auth-input {
+      width: 100%;
+      background: #1a1a35;
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 0.8rem 1rem;
+      color: var(--text);
+      font-size: 0.9rem;
+      margin-bottom: 0.75rem;
+      transition: border 0.2s;
+    }
+    .auth-input:focus { outline: none; border-color: var(--accent2); }
+    .auth-input::placeholder { color: #5a5a7a; }
+
+    .btn-auth {
+      width: 100%;
+      background: linear-gradient(135deg,#7c3aed,#a855f7);
+      color: white; border: none;
+      border-radius: 12px;
+      padding: 0.85rem;
+      font-size: 0.95rem; font-weight: 700; cursor: pointer;
+      transition: all 0.2s; margin-top: 0.25rem;
+    }
+    .btn-auth:hover { box-shadow: 0 8px 24px rgba(124,58,237,0.45); }
+    .btn-auth:disabled { opacity: 0.6; cursor: not-allowed; }
+
+    .btn-google {
+      width: 100%;
+      background: #fff; color: #1f1f1f; border: none;
+      border-radius: 12px; padding: 0.8rem;
+      font-size: 0.9rem; font-weight: 700; cursor: pointer;
+      display: flex; align-items: center; justify-content: center; gap: 0.6rem;
+      transition: all 0.2s;
+    }
+    .btn-google:hover { box-shadow: 0 6px 18px rgba(255,255,255,0.15); }
+
+    .auth-divider {
+      display: flex; align-items: center; gap: 0.75rem;
+      color: var(--text-muted); font-size: 0.75rem; margin: 1.1rem 0;
+    }
+    .auth-divider::before, .auth-divider::after { content: ''; flex: 1; height: 1px; background: var(--border); }
+
+    .auth-toggle { margin-top: 1.1rem; font-size: 0.82rem; color: var(--text-muted); }
+    .auth-toggle a { color: var(--accent2); cursor: pointer; font-weight: 600; text-decoration: none; }
+    .auth-toggle a:hover { text-decoration: underline; }
+
+    .auth-msg { font-size: 0.82rem; margin-bottom: 0.75rem; min-height: 1rem; }
+    .auth-msg.err { color: #f87171; }
+    .auth-msg.ok  { color: #10b981; }
+    .auth-skip { margin-top: 1rem; font-size: 0.78rem; }
+    .auth-skip a { color: var(--text-muted); cursor: pointer; text-decoration: underline; }
+
+    /* ── Mastered button on card ── */
+    .btn-master {
+      border-radius: 50%; width: 46px; height: 46px;
+      display: flex; align-items: center; justify-content: center;
+      cursor: pointer; transition: all 0.2s ease; padding: 0; flex-shrink: 0;
+      background: rgba(16,185,129,0.12); color: #10b981; border: 1px solid rgba(16,185,129,0.3);
+    }
+    .btn-master:hover { background: rgba(16,185,129,0.25); box-shadow: 0 0 18px rgba(16,185,129,0.35); transform: scale(1.08); }
+    .btn-master.mastered {
+      background: linear-gradient(135deg,#10b981,#059669); color: #fff; border-color: transparent;
+      box-shadow: 0 0 18px rgba(16,185,129,0.5);
+    }
+
+    /* Mastered ribbon on card */
+    .master-ribbon {
+      position: absolute; top: 12px; right: 12px;
+      background: rgba(16,185,129,0.2); color: #10b981;
+      border: 1px solid rgba(16,185,129,0.4);
+      font-size: 0.62rem; font-weight: 700; letter-spacing: 0.05em;
+      padding: 0.15rem 0.5rem; border-radius: 99px;
+      display: none;
+    }
+    .master-ribbon.show { display: block; }
+
+    /* ── Progress stat (mastered count) ── */
+    .stat-num.col-green2 { color: #10b981; }
+
+    /* ── Progress dashboard button ── */
+    .btn-progress {
+      background: rgba(168,85,247,0.12); color: #c084fc;
+      border: 1px solid rgba(168,85,247,0.3);
+      border-radius: 10px; padding: 0.45rem 1rem;
+      font-size: 0.82rem; font-weight: 700; cursor: pointer;
+      display: flex; align-items: center; gap: 0.4rem; transition: all 0.2s;
+    }
+    .btn-progress:hover { background: rgba(168,85,247,0.22); }
+
+    /* Progress dashboard bars */
+    .prog-cat-row { margin-bottom: 0.8rem; }
+    .prog-cat-head { display: flex; justify-content: space-between; font-size: 0.82rem; margin-bottom: 0.3rem; }
+    .prog-cat-name { color: var(--text); font-weight: 600; }
+    .prog-cat-val  { color: var(--text-muted); }
+    .prog-cat-bar  { height: 8px; background: var(--border); border-radius: 99px; overflow: hidden; }
+    .prog-cat-fill { height: 100%; background: linear-gradient(90deg,#10b981,#34d399); border-radius: 99px; transition: width 0.6s ease; }
   </style>
 </head>
 <body>
+
+  <!-- ── Auth screen ── -->
+  <div class="auth-overlay" id="auth-overlay">
+    <div class="auth-card">
+      <div class="auth-logo">🃏</div>
+      <div class="auth-title">English Flashcards</div>
+      <div class="auth-sub" id="auth-sub">Inicia sesión para guardar tu progreso</div>
+
+      <div class="auth-msg" id="auth-msg"></div>
+
+      <button class="btn-google" onclick="loginGoogle()">
+        <svg width="18" height="18" viewBox="0 0 24 24"><path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/><path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/><path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l3.66-2.84z"/><path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/></svg>
+        Continuar con Google
+      </button>
+
+      <div class="auth-divider">o con tu correo</div>
+
+      <input type="email"    class="auth-input" id="auth-email"    placeholder="tu@correo.com" autocomplete="email" />
+      <input type="password" class="auth-input" id="auth-password" placeholder="Contraseña (mín. 6)" autocomplete="current-password" />
+
+      <button class="btn-auth" id="btn-auth-submit" onclick="submitAuth()">Iniciar sesión</button>
+
+      <div class="auth-toggle" id="auth-toggle">
+        ¿No tienes cuenta? <a onclick="toggleAuthMode()">Regístrate</a>
+      </div>
+
+      <div class="auth-skip">
+        <a onclick="skipAuth()">Continuar sin cuenta →</a>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── User badge ── -->
+  <div class="user-badge hidden" id="user-badge">
+    <div class="user-avatar" id="user-avatar">?</div>
+    <span class="user-email" id="user-email"></span>
+    <button class="btn-logout" onclick="logout()">Salir</button>
+  </div>
 
   <h1>English Flashcards</h1>
   <p class="subtitle">Practice your English phrases</p>
@@ -436,6 +625,7 @@
     <div class="scene">
       <div class="card" id="flashcard" onclick="flipCard()">
         <div class="card-face card-front">
+          <span class="master-ribbon" id="master-ribbon">✓ DOMINADA</span>
           <span class="card-label">English</span>
           <p class="card-phrase" id="phrase-text"></p>
           <div class="card-actions">
@@ -452,6 +642,11 @@
                 <path d="M5 10a7 7 0 0 0 14 0"/>
                 <line x1="12" y1="19" x2="12" y2="22"/>
                 <line x1="9"  y1="22" x2="15" y2="22"/>
+              </svg>
+            </button>
+            <button class="btn-master" id="btn-master" onclick="event.stopPropagation(); toggleMastered()" title="Marcar como dominada">
+              <svg width="22" height="22" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24">
+                <path d="M20 6L9 17l-5-5"/>
               </svg>
             </button>
           </div>
@@ -502,7 +697,15 @@
     <div class="stats">
       <div class="stat"><div class="stat-num" id="stat-total">0</div><div class="stat-label">Total cards</div></div>
       <div class="stat"><div class="stat-num" id="stat-seen">0</div><div class="stat-label">Seen</div></div>
+      <div class="stat"><div class="stat-num col-green2" id="stat-mastered">0</div><div class="stat-label">Dominadas</div></div>
       <div class="stat"><div class="stat-num" id="stat-remaining">0</div><div class="stat-label">Remaining</div></div>
+    </div>
+
+    <div style="display:flex; justify-content:center; margin-top:1.5rem;">
+      <button class="btn-progress" id="btn-progress" onclick="showProgressDashboard()">
+        <svg width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M3 3v18h18"/><path d="M18 17V9M13 17V5M8 17v-3"/></svg>
+        Mi progreso
+      </button>
     </div>
   </div>
 
@@ -561,33 +764,101 @@
     </div>
   </div>
 
+  <!-- ── Progress Dashboard Modal ── -->
+  <div class="modal-overlay hidden" id="progress-modal">
+    <div class="modal">
+      <button class="modal-close" onclick="closeProgressDashboard()">✕</button>
+      <div class="report-title">📈 Mi Progreso</div>
+      <div class="report-subtitle" id="prog-subtitle">Tu avance aprendiendo inglés</div>
+
+      <div id="prog-circle-wrap"></div>
+
+      <div class="report-summary">
+        <div class="summary-card">
+          <div class="summary-num col-green" id="prog-mastered">0</div>
+          <div class="summary-label">Dominadas</div>
+        </div>
+        <div class="summary-card">
+          <div class="summary-num col-yellow" id="prog-practicing">0</div>
+          <div class="summary-label">En práctica</div>
+        </div>
+        <div class="summary-card">
+          <div class="summary-num col-purple" id="prog-total">0</div>
+          <div class="summary-label">Total frases</div>
+        </div>
+      </div>
+
+      <div class="report-section">
+        <div class="report-section-title">📚 Progreso por categoría</div>
+        <div id="prog-categories"></div>
+      </div>
+
+      <button class="btn btn-primary" style="width:100%; justify-content:center; margin-top:0.5rem;" onclick="closeProgressDashboard()">
+        Seguir practicando 🚀
+      </button>
+    </div>
+  </div>
+
   <script>
     // ╔══════════════════════════════════════════════════════════╗
     // ║  CONFIGURACIÓN SUPABASE                                   ║
     // ╚══════════════════════════════════════════════════════════╝
     const SUPABASE_URL = 'https://amdgbcrphpbdugsdsaqh.supabase.co';
     const SUPABASE_KEY = 'sb_publishable_Uxfxt2hwHdjEz0OH_9oicQ_Es-CU7VI';
-    const SB_HEADERS   = { apikey: SUPABASE_KEY, Authorization: 'Bearer ' + SUPABASE_KEY };
+    const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 
     let phrases = [];
     let current = 0;
     let seen    = new Set();
     let activeCategory = 'all';
-    let allPhrases = [];   // caché completa traída de Supabase
+    let allPhrases = [];          // caché completa traída de Supabase
+    let currentUser = null;       // usuario autenticado (o null = invitado)
+    let progressMap = new Map();  // phrase_id -> { status, best_score, attempts }
 
     // ── Fetch all phrases once from Supabase ──────────────────────
     async function fetchAllPhrases() {
-      const url = SUPABASE_URL + '/rest/v1/phrases?select=phrase_id,phrase_name,phrase_translation,description,category';
-      const res = await fetch(url, { headers: SB_HEADERS });
-      if (!res.ok) throw new Error('Supabase ' + res.status + ': ' + await res.text());
-      const rows = await res.json();
-      return rows.map(r => ({
+      const { data, error } = await sb
+        .from('phrases')
+        .select('phrase_id,phrase_name,phrase_translation,description,category');
+      if (error) throw new Error(error.message);
+      return data.map(r => ({
         id: r.phrase_id,
         phrase: r.phrase_name,
         translation: r.phrase_translation,
         description: r.description || '',
         category: r.category || ''
       }));
+    }
+
+    // ── Cargar progreso del usuario ───────────────────────────────
+    async function loadProgress() {
+      progressMap = new Map();
+      if (!currentUser) return;
+      const { data, error } = await sb
+        .from('user_progress')
+        .select('phrase_id,status,best_score,attempts');
+      if (error) { console.warn('progress:', error.message); return; }
+      data.forEach(r => progressMap.set(r.phrase_id, {
+        status: r.status, best_score: r.best_score, attempts: r.attempts
+      }));
+    }
+
+    // ── Guardar/actualizar progreso de una frase ──────────────────
+    async function saveProgress(phraseId, { status, score } = {}) {
+      if (!currentUser) return;
+      const existing = progressMap.get(phraseId) || { status: 'practicing', best_score: 0, attempts: 0 };
+      const row = {
+        user_id:    currentUser.id,
+        phrase_id:  phraseId,
+        status:     status || existing.status || 'practicing',
+        best_score: Math.max(existing.best_score || 0, score || 0),
+        attempts:   (existing.attempts || 0) + (score !== undefined ? 1 : 0),
+        last_practiced: new Date().toISOString()
+      };
+      progressMap.set(phraseId, { status: row.status, best_score: row.best_score, attempts: row.attempts });
+      const { error } = await sb.from('user_progress')
+        .upsert(row, { onConflict: 'user_id,phrase_id' });
+      if (error) console.warn('saveProgress:', error.message);
     }
 
     function shuffle(arr) {
@@ -818,6 +1089,61 @@
       document.getElementById('report-modal').classList.add('hidden');
     }
 
+    // ── Dashboard de progreso ─────────────────────────────────────
+    function showProgressDashboard() {
+      if (!currentUser) return;
+      const total     = allPhrases.length;
+      let mastered    = 0, practicing = 0;
+      allPhrases.forEach(p => {
+        const st = progressMap.get(p.id)?.status;
+        if (st === 'mastered') mastered++;
+        else if (st === 'practicing' || progressMap.has(p.id)) practicing++;
+      });
+      const pct = total > 0 ? Math.round((mastered / total) * 100) : 0;
+
+      document.getElementById('prog-subtitle').textContent =
+        `Has dominado ${mastered} de ${total} frases`;
+
+      // Círculo de avance
+      const cls = pct >= 70 ? 'score-circle-great' : pct >= 30 ? 'score-circle-good' : 'score-circle-try';
+      document.getElementById('prog-circle-wrap').innerHTML = `
+        <div class="score-circle ${cls}">
+          <span>${pct}%</span>
+          <span class="score-circle-label">DOMINADO</span>
+        </div>`;
+
+      document.getElementById('prog-mastered').textContent   = mastered;
+      document.getElementById('prog-practicing').textContent = practicing;
+      document.getElementById('prog-total').textContent      = total;
+
+      // Progreso por categoría
+      const byCat = {};
+      allPhrases.forEach(p => {
+        const c = p.category || 'Sin categoría';
+        if (!byCat[c]) byCat[c] = { total: 0, mastered: 0 };
+        byCat[c].total++;
+        if (progressMap.get(p.id)?.status === 'mastered') byCat[c].mastered++;
+      });
+      const cats = Object.entries(byCat).sort((a, b) => b[1].total - a[1].total);
+      document.getElementById('prog-categories').innerHTML = cats.map(([name, d]) => {
+        const cp = d.total > 0 ? Math.round((d.mastered / d.total) * 100) : 0;
+        return `
+          <div class="prog-cat-row">
+            <div class="prog-cat-head">
+              <span class="prog-cat-name">${name}</span>
+              <span class="prog-cat-val">${d.mastered}/${d.total}</span>
+            </div>
+            <div class="prog-cat-bar"><div class="prog-cat-fill" style="width:${cp}%"></div></div>
+          </div>`;
+      }).join('');
+
+      document.getElementById('progress-modal').classList.remove('hidden');
+    }
+
+    function closeProgressDashboard() {
+      document.getElementById('progress-modal').classList.add('hidden');
+    }
+
     // ── Load phrases (filter cache + shuffle) ─────────────────────
     function loadPhrases() {
       const filtered = (activeCategory && activeCategory !== 'all')
@@ -829,10 +1155,11 @@
       showCard(0);
     }
 
-    // ── Initial load from Supabase ────────────────────────────────
-    async function init() {
+    // ── Cargar las frases + progreso y arrancar la app ────────────
+    async function loadAppData() {
       try {
-        allPhrases = await fetchAllPhrases();
+        if (allPhrases.length === 0) allPhrases = await fetchAllPhrases();
+        await loadProgress();
         document.getElementById('loading').classList.add('hidden');
         loadCategories();
         loadPhrases();
@@ -842,6 +1169,129 @@
         box.textContent = 'Error conectando a Supabase: ' + e.message;
         box.classList.remove('hidden');
       }
+    }
+
+    // ╔══════════════════════════════════════════════════════════╗
+    // ║  AUTENTICACIÓN                                            ║
+    // ╚══════════════════════════════════════════════════════════╝
+    let authMode = 'login';  // 'login' | 'signup'
+
+    async function init() {
+      // ¿Hay sesión activa? (ej. regreso de Google, o sesión guardada)
+      const { data: { session } } = await sb.auth.getSession();
+      if (session && session.user) {
+        currentUser = session.user;
+        enterApp();
+      } else {
+        // Mostrar pantalla de login
+        document.getElementById('loading').classList.add('hidden');
+        document.getElementById('auth-overlay').style.display = 'flex';
+      }
+
+      // Reaccionar a cambios de sesión (login con Google redirige y vuelve)
+      sb.auth.onAuthStateChange((event, session) => {
+        if (event === 'SIGNED_IN' && session && session.user) {
+          if (!currentUser || currentUser.id !== session.user.id) {
+            currentUser = session.user;
+            enterApp();
+          }
+        }
+      });
+    }
+
+    function enterApp() {
+      document.getElementById('auth-overlay').style.display = 'none';
+      // Badge de usuario
+      if (currentUser) {
+        const email = currentUser.email || 'Usuario';
+        document.getElementById('user-email').textContent  = email;
+        document.getElementById('user-avatar').textContent = email[0].toUpperCase();
+        document.getElementById('user-badge').classList.remove('hidden');
+        document.getElementById('btn-progress').style.display = '';
+      } else {
+        // Modo invitado
+        document.getElementById('user-badge').classList.add('hidden');
+        document.getElementById('btn-progress').style.display = 'none';
+      }
+      loadAppData();
+    }
+
+    function toggleAuthMode() {
+      authMode = (authMode === 'login') ? 'signup' : 'login';
+      const isLogin = authMode === 'login';
+      document.getElementById('auth-sub').textContent       = isLogin ? 'Inicia sesión para guardar tu progreso' : 'Crea tu cuenta para empezar';
+      document.getElementById('btn-auth-submit').textContent = isLogin ? 'Iniciar sesión' : 'Crear cuenta';
+      document.getElementById('auth-toggle').innerHTML       = isLogin
+        ? '¿No tienes cuenta? <a onclick="toggleAuthMode()">Regístrate</a>'
+        : '¿Ya tienes cuenta? <a onclick="toggleAuthMode()">Inicia sesión</a>';
+      setAuthMsg('', '');
+    }
+
+    function setAuthMsg(text, type) {
+      const el = document.getElementById('auth-msg');
+      el.textContent = text;
+      el.className = 'auth-msg ' + (type || '');
+    }
+
+    async function submitAuth() {
+      const email = document.getElementById('auth-email').value.trim();
+      const pass  = document.getElementById('auth-password').value;
+      if (!email || !pass) { setAuthMsg('Escribe tu correo y contraseña.', 'err'); return; }
+      if (pass.length < 6) { setAuthMsg('La contraseña debe tener al menos 6 caracteres.', 'err'); return; }
+
+      const btn = document.getElementById('btn-auth-submit');
+      btn.disabled = true;
+      const original = btn.textContent;
+      btn.textContent = 'Procesando...';
+
+      try {
+        if (authMode === 'signup') {
+          const { data, error } = await sb.auth.signUp({ email, password: pass });
+          if (error) throw error;
+          if (data.session) {
+            currentUser = data.user;
+            enterApp();
+          } else {
+            // Requiere confirmación por correo
+            setAuthMsg('✅ Cuenta creada. Revisa tu correo para confirmar y luego inicia sesión.', 'ok');
+            authMode = 'login';
+          }
+        } else {
+          const { data, error } = await sb.auth.signInWithPassword({ email, password: pass });
+          if (error) throw error;
+          currentUser = data.user;
+          enterApp();
+        }
+      } catch(e) {
+        let msg = e.message || 'Error de autenticación';
+        if (/invalid login/i.test(msg))       msg = 'Correo o contraseña incorrectos.';
+        if (/already registered/i.test(msg))   msg = 'Ese correo ya está registrado. Inicia sesión.';
+        if (/not confirmed/i.test(msg))        msg = 'Debes confirmar tu correo antes de entrar.';
+        setAuthMsg(msg, 'err');
+      } finally {
+        btn.disabled = false;
+        btn.textContent = original;
+      }
+    }
+
+    async function loginGoogle() {
+      const { error } = await sb.auth.signInWithOAuth({
+        provider: 'google',
+        options: { redirectTo: window.location.href.split('#')[0] }
+      });
+      if (error) setAuthMsg('Google: ' + error.message, 'err');
+    }
+
+    function skipAuth() {
+      currentUser = null;
+      enterApp();
+    }
+
+    async function logout() {
+      await sb.auth.signOut();
+      currentUser = null;
+      progressMap = new Map();
+      location.reload();
     }
 
     function showCard(index) {
@@ -858,10 +1308,34 @@
       document.getElementById('description-text').textContent = p.description;
       document.getElementById('flashcard').classList.remove('flipped');
       hidePronunPanel();
+      reflectMastered(p.id);
       const pct = Math.round(((index + 1) / phrases.length) * 100);
       document.getElementById('progress-text').textContent = `Card ${index + 1} of ${phrases.length}`;
       document.getElementById('progress-pct').textContent  = pct + '%';
       document.getElementById('progress-fill').style.width = pct + '%';
+      updateStats();
+    }
+
+    // Refleja en la UI si la frase actual está dominada
+    function reflectMastered(phraseId) {
+      const isMastered = progressMap.get(phraseId)?.status === 'mastered';
+      const btn    = document.getElementById('btn-master');
+      const ribbon = document.getElementById('master-ribbon');
+      // Modo invitado: ocultar botón de dominar
+      btn.style.display = currentUser ? 'flex' : 'none';
+      btn.classList.toggle('mastered', isMastered);
+      btn.title = isMastered ? 'Dominada ✓ (click para desmarcar)' : 'Marcar como dominada';
+      ribbon.classList.toggle('show', isMastered && !!currentUser);
+    }
+
+    // Botón "ya la domino"
+    async function toggleMastered() {
+      if (!currentUser) return;
+      const p = phrases[current];
+      const isMastered = progressMap.get(p.id)?.status === 'mastered';
+      const newStatus = isMastered ? 'practicing' : 'mastered';
+      await saveProgress(p.id, { status: newStatus });
+      reflectMastered(p.id);
       updateStats();
     }
 
@@ -872,6 +1346,10 @@
       document.getElementById('stat-total').textContent     = phrases.length;
       document.getElementById('stat-seen').textContent      = seen.size;
       document.getElementById('stat-remaining').textContent = phrases.length - seen.size;
+      // Dominadas dentro del set actual
+      let mastered = 0;
+      phrases.forEach(p => { if (progressMap.get(p.id)?.status === 'mastered') mastered++; });
+      document.getElementById('stat-mastered').textContent = mastered;
     }
     function restartDeck() {
       seen.clear();
@@ -1005,6 +1483,13 @@
           said:  bestResult,
           timestamp: Date.now()
         });
+        // Guardar progreso automáticamente: 80%+ marca la frase como dominada
+        const p = phrases[current];
+        if (p && currentUser) {
+          const autoStatus = bestScore.pct >= 80 ? 'mastered' : undefined;
+          saveProgress(p.id, { status: autoStatus, score: bestScore.pct })
+            .then(() => { reflectMastered(p.id); updateStats(); });
+        }
         showPronunResult(expected, bestResult, bestScore);
       };
 
@@ -1089,15 +1574,27 @@
 
     // ── Keyboard shortcuts ────────────────────────────────────────
     document.addEventListener('keydown', e => {
-      if (document.getElementById('report-modal').classList.contains('hidden')) {
-        if (e.key === 'ArrowRight' || e.key === 'Enter') nextCard();
-        if (e.key === 'ArrowLeft')  prevCard();
-        if (e.key === ' ')          { e.preventDefault(); flipCard(); }
-        if (e.key === 'r' || e.key === 'R') toggleMic();
-        if (e.key === 't' || e.key === 'T') timerRunning ? stopTimer() : startTimer();
-      } else {
-        if (e.key === 'Escape') closeReport();
+      // No interferir mientras se escribe en un input (login)
+      const tag = (e.target.tagName || '').toLowerCase();
+      if (tag === 'input' || tag === 'textarea') {
+        if (e.key === 'Enter') submitAuth();
+        return;
       }
+      // No actuar si la pantalla de login está visible
+      if (document.getElementById('auth-overlay').style.display !== 'none') return;
+
+      const reportOpen   = !document.getElementById('report-modal').classList.contains('hidden');
+      const progressOpen = !document.getElementById('progress-modal').classList.contains('hidden');
+
+      if (reportOpen)   { if (e.key === 'Escape') closeReport();            return; }
+      if (progressOpen) { if (e.key === 'Escape') closeProgressDashboard(); return; }
+
+      if (e.key === 'ArrowRight' || e.key === 'Enter') nextCard();
+      if (e.key === 'ArrowLeft')  prevCard();
+      if (e.key === ' ')          { e.preventDefault(); flipCard(); }
+      if (e.key === 'r' || e.key === 'R') toggleMic();
+      if (e.key === 't' || e.key === 'T') timerRunning ? stopTimer() : startTimer();
+      if (e.key === 'm' || e.key === 'M') toggleMastered();
     });
 
     init();
