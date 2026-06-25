@@ -1404,7 +1404,103 @@
       return r;
     }
 
-    function toggleMic() { isListening ? stopListening() : startListening(); }
+    // ¿Usar transcripción en la nube? (móvil / iOS / sin Web Speech API)
+    function useCloudSTT() {
+      const ua = navigator.userAgent || '';
+      const isIOS = /iPad|iPhone|iPod/.test(ua) ||
+                    (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+      const isAndroid = /Android/.test(ua);
+      const hasWebSpeech = !!(window.SpeechRecognition || window.webkitSpeechRecognition);
+      return isIOS || isAndroid || !hasWebSpeech;
+    }
+
+    function toggleMic() {
+      if (useCloudSTT()) {
+        isListening ? stopCloudRecording() : startCloudRecording();
+      } else {
+        isListening ? stopListening() : startListening();
+      }
+    }
+
+    // Lógica compartida: registra el resultado, guarda progreso y lo muestra
+    function finishPronun(expected, said, score) {
+      practiceLog.push({
+        phrase: expected,
+        translation: phrases[current]?.translation || '',
+        score: score.pct,
+        said:  said,
+        timestamp: Date.now()
+      });
+      const p = phrases[current];
+      if (p && currentUser) {
+        const autoStatus = score.pct >= 80 ? 'mastered' : undefined;
+        saveProgress(p.id, { status: autoStatus, score: score.pct })
+          .then(() => { reflectMastered(p.id); updateStats(); });
+      }
+      showPronunResult(expected, said, score);
+    }
+
+    // ── Modo nube: grabar audio y enviarlo a la Edge Function ─────
+    let mediaRecorder = null, recordedChunks = [];
+
+    async function startCloudRecording() {
+      hidePronunPanel();
+      const btn = document.getElementById('btn-mic');
+      let stream;
+      try {
+        stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      } catch(e) {
+        showPronunError('No pude acceder al micrófono. Revisa los permisos del navegador.');
+        return;
+      }
+      startWaveform(stream);
+      recordedChunks = [];
+      let options = {};
+      if (window.MediaRecorder && MediaRecorder.isTypeSupported) {
+        if (MediaRecorder.isTypeSupported('audio/webm'))     options = { mimeType: 'audio/webm' };
+        else if (MediaRecorder.isTypeSupported('audio/mp4')) options = { mimeType: 'audio/mp4' };
+      }
+      try { mediaRecorder = new MediaRecorder(stream, options); }
+      catch(e) { mediaRecorder = new MediaRecorder(stream); }
+      mediaRecorder.ondataavailable = e => { if (e.data && e.data.size > 0) recordedChunks.push(e.data); };
+      mediaRecorder.onstop = handleCloudStop;
+      mediaRecorder.start();
+      isListening = true;
+      btn.classList.add('listening');
+      btn.title = 'Grabando... (click para terminar)';
+    }
+
+    function stopCloudRecording() {
+      isListening = false;
+      document.getElementById('btn-mic').classList.remove('listening');
+      if (mediaRecorder && mediaRecorder.state !== 'inactive') {
+        mediaRecorder.stop();  // dispara handleCloudStop
+      }
+    }
+
+    async function handleCloudStop() {
+      stopWaveform();
+      const type = (recordedChunks[0] && recordedChunks[0].type) || 'audio/webm';
+      const blob = new Blob(recordedChunks, { type });
+      recordedChunks = [];
+      if (blob.size < 1200) { showPronunError('No te escuché. Intenta de nuevo 🎤'); return; }
+
+      const ext = type.includes('mp4') ? 'mp4' : type.includes('ogg') ? 'ogg' : 'webm';
+      showPronunLoading();
+      try {
+        const form = new FormData();
+        form.append('file', blob, 'audio.' + ext);
+        form.append('language', 'en');
+        const { data, error } = await sb.functions.invoke('transcribe', { body: form });
+        if (error) throw new Error(error.message || 'Error en la transcripción');
+        const said = (data && data.text ? data.text : '').trim();
+        if (!said) { showPronunError('No entendí lo que dijiste. Intenta de nuevo 🎤'); return; }
+        const expected = document.getElementById('phrase-text').textContent;
+        finishPronun(expected, said, scorePronunciation(expected, said));
+      } catch(e) {
+        showPronunError('Error transcribiendo: ' + (e.message || e));
+      }
+    }
 
     // ── Waveform ──────────────────────────────────────────────────
     let audioCtx = null, analyser = null, micStream = null, animFrame = null;
@@ -1419,10 +1515,10 @@
       }
     }
 
-    async function startWaveform() {
+    async function startWaveform(existingStream) {
       buildWaveBars();
       try {
-        micStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        micStream = existingStream || await navigator.mediaDevices.getUserMedia({ audio: true });
         audioCtx  = new (window.AudioContext || window.webkitAudioContext)();
         analyser  = audioCtx.createAnalyser();
         analyser.fftSize = 128;
@@ -1475,22 +1571,7 @@
           const score = scorePronunciation(expected, alt);
           if (score.pct > bestScore.pct) { bestScore = score; bestResult = alt; }
         }
-        // Log result for report
-        practiceLog.push({
-          phrase: expected,
-          translation: phrases[current]?.translation || '',
-          score: bestScore.pct,
-          said:  bestResult,
-          timestamp: Date.now()
-        });
-        // Guardar progreso automáticamente: 80%+ marca la frase como dominada
-        const p = phrases[current];
-        if (p && currentUser) {
-          const autoStatus = bestScore.pct >= 80 ? 'mastered' : undefined;
-          saveProgress(p.id, { status: autoStatus, score: bestScore.pct })
-            .then(() => { reflectMastered(p.id); updateStats(); });
-        }
-        showPronunResult(expected, bestResult, bestScore);
+        finishPronun(expected, bestResult, bestScore);
       };
 
       recognition.onerror = (e) => {
@@ -1567,8 +1648,25 @@
       document.getElementById('pronun-panel').classList.remove('hidden');
     }
 
+    // Estado "transcribiendo..." mientras responde la nube
+    function showPronunLoading() {
+      document.getElementById('score-badge').textContent = '···';
+      document.getElementById('score-badge').className   = 'score-badge score-good';
+      document.getElementById('word-row').innerHTML      = '';
+      document.getElementById('you-said').textContent    = '';
+      document.getElementById('pronun-tip').textContent  = '⏳ Transcribiendo tu voz...';
+      document.getElementById('pronun-panel').classList.remove('hidden');
+    }
+
     function hidePronunPanel() {
       document.getElementById('pronun-panel').classList.add('hidden');
+      // Cancelar grabación en curso sin disparar transcripción
+      if (mediaRecorder && mediaRecorder.state !== 'inactive') {
+        try { mediaRecorder.onstop = null; mediaRecorder.stop(); } catch(e){}
+        isListening = false;
+        document.getElementById('btn-mic').classList.remove('listening');
+        stopWaveform();
+      }
       stopListening();
     }
 
