@@ -535,6 +535,39 @@
     }
     .btn-progress:hover { background: rgba(168,85,247,0.22); }
 
+    /* Streak bar */
+    .streak-bar {
+      display: flex; align-items: center; gap: 0.6rem; flex-wrap: wrap; justify-content: center;
+      background: linear-gradient(135deg, rgba(251,146,60,0.12), rgba(239,68,68,0.1));
+      border: 1px solid rgba(251,146,60,0.3); border-radius: 14px;
+      padding: 0.55rem 1rem; margin-bottom: 1.5rem; width: 100%; max-width: 560px; font-size: 0.88rem;
+    }
+    .streak-flame { font-size: 1.3rem; line-height: 1; }
+    .streak-flame.pop { animation: flamePop 0.6s ease; }
+    @keyframes flamePop { 0%{transform:scale(1);} 40%{transform:scale(1.5) rotate(-8deg);} 100%{transform:scale(1);} }
+    .streak-count { color: #fb923c; font-weight: 800; }
+    .streak-sep { color: var(--text-muted); }
+    .streak-today-label { color: var(--text-muted); }
+    .streak-today-val { color: var(--text); font-weight: 700; }
+    .streak-mini { flex: 1; min-width: 80px; height: 7px; background: var(--border); border-radius: 99px; overflow: hidden; }
+    .streak-mini-fill { height: 100%; background: linear-gradient(90deg,#fb923c,#ef4444); border-radius: 99px; width: 0%; transition: width 0.5s ease; }
+    .streak-done { color: #10b981; font-weight: 700; }
+
+    /* Streak calendar (dashboard) */
+    .cal-grid { display: flex; flex-wrap: wrap; gap: 6px; }
+    .cal-cell {
+      width: 26px; height: 26px; border-radius: 7px;
+      background: #1a1a35; border: 1px solid var(--border);
+      display: flex; align-items: center; justify-content: center; font-size: 0.6rem; color: var(--text-muted);
+    }
+    .cal-cell.met   { background: linear-gradient(135deg,#fb923c,#ef4444); border-color: transparent; color: #fff; font-weight: 700; }
+    .cal-cell.some  { background: rgba(251,146,60,0.25); border-color: rgba(251,146,60,0.4); color: #fb923c; }
+    .cal-cell.today { outline: 2px solid var(--accent2); outline-offset: 1px; }
+    .streak-big { display: flex; gap: 1.5rem; justify-content: center; margin-bottom: 1.25rem; }
+    .streak-big-item { text-align: center; }
+    .streak-big-num { font-size: 1.8rem; font-weight: 800; color: #fb923c; }
+    .streak-big-label { font-size: 0.72rem; color: var(--text-muted); }
+
     /* Progress dashboard bars */
     .prog-cat-row { margin-bottom: 0.8rem; }
     .prog-cat-head { display: flex; justify-content: space-between; font-size: 0.82rem; margin-bottom: 0.3rem; }
@@ -591,6 +624,16 @@
   <div class="category-bar hidden" id="category-bar"></div>
 
   <div id="main-content" class="hidden">
+
+    <!-- Streak bar -->
+    <div class="streak-bar hidden" id="streak-bar">
+      <span class="streak-flame" id="streak-flame">🔥</span>
+      <span><span class="streak-count" id="streak-count">0</span> días de racha</span>
+      <span class="streak-sep">·</span>
+      <span class="streak-today-label">Hoy: <span class="streak-today-val" id="streak-today">0</span>/<span id="streak-goal">10</span></span>
+      <div class="streak-mini"><div class="streak-mini-fill" id="streak-mini-fill"></div></div>
+      <span class="streak-done hidden" id="streak-done">¡Meta cumplida! ✓</span>
+    </div>
 
     <!-- Timer bar -->
     <div class="timer-bar">
@@ -789,6 +832,25 @@
       </div>
 
       <div class="report-section">
+        <div class="report-section-title">🔥 Racha diaria</div>
+        <div class="streak-big">
+          <div class="streak-big-item">
+            <div class="streak-big-num" id="prog-streak-cur">0</div>
+            <div class="streak-big-label">Racha actual</div>
+          </div>
+          <div class="streak-big-item">
+            <div class="streak-big-num" id="prog-streak-best">0</div>
+            <div class="streak-big-label">Mejor racha</div>
+          </div>
+          <div class="streak-big-item">
+            <div class="streak-big-num" id="prog-streak-total" style="color:#10b981;">0</div>
+            <div class="streak-big-label">Días activos</div>
+          </div>
+        </div>
+        <div class="cal-grid" id="prog-calendar"></div>
+      </div>
+
+      <div class="report-section">
         <div class="report-section-title">📚 Progreso por categoría</div>
         <div id="prog-categories"></div>
       </div>
@@ -859,6 +921,115 @@
       const { error } = await sb.from('user_progress')
         .upsert(row, { onConflict: 'user_id,phrase_id' });
       if (error) console.warn('saveProgress:', error.message);
+    }
+
+    // ╔══════════════════════════════════════════════════════════╗
+    // ║  RACHA DIARIA (meta de frases)                           ║
+    // ╚══════════════════════════════════════════════════════════╝
+    const DAILY_GOAL = 10;               // frases distintas por día para "cumplir"
+    let studiedTodayIds = new Set();     // ids estudiados hoy
+    let dailyGoalMet    = false;
+    let activityDays    = [];            // [{ day:'YYYY-MM-DD', goal_met:bool, count:int }]
+
+    function todayStr(d) {
+      d = d || new Date();
+      const m = String(d.getMonth() + 1).padStart(2, '0');
+      const day = String(d.getDate()).padStart(2, '0');
+      return `${d.getFullYear()}-${m}-${day}`;
+    }
+
+    // Cargar historial de actividad y calcular racha
+    async function loadStreak() {
+      activityDays = [];
+      studiedTodayIds = new Set();
+      dailyGoalMet = false;
+      if (!currentUser) { document.getElementById('streak-bar').classList.add('hidden'); return; }
+
+      const since = new Date(); since.setDate(since.getDate() - 90);
+      const { data, error } = await sb
+        .from('activity_days')
+        .select('day,phrase_ids,goal_met')
+        .gte('day', todayStr(since))
+        .order('day', { ascending: true });
+      if (error) { console.warn('loadStreak:', error.message); }
+      else {
+        activityDays = (data || []).map(r => ({
+          day: r.day,
+          goal_met: r.goal_met,
+          count: (r.phrase_ids || []).length
+        }));
+        const todayRow = (data || []).find(r => r.day === todayStr());
+        if (todayRow) {
+          studiedTodayIds = new Set(todayRow.phrase_ids || []);
+          dailyGoalMet = todayRow.goal_met;
+        }
+      }
+      document.getElementById('streak-bar').classList.remove('hidden');
+      document.getElementById('streak-goal').textContent = DAILY_GOAL;
+      updateStreakUI();
+    }
+
+    // Marcar una frase como estudiada hoy (la llaman flip y pronunciación)
+    async function markPhraseStudied(phraseId) {
+      if (!currentUser || phraseId == null) return;
+      if (studiedTodayIds.has(phraseId)) return;
+      studiedTodayIds.add(phraseId);
+      const ids = [...studiedTodayIds];
+      const metNow = ids.length >= DAILY_GOAL;
+      const justMet = metNow && !dailyGoalMet;
+      dailyGoalMet = metNow;
+
+      // Actualizar/insertar el día de hoy en el historial local
+      const t = todayStr();
+      const existing = activityDays.find(a => a.day === t);
+      if (existing) { existing.count = ids.length; existing.goal_met = metNow; }
+      else activityDays.push({ day: t, goal_met: metNow, count: ids.length });
+
+      updateStreakUI();
+      if (justMet) celebrateGoal();
+
+      const { error } = await sb.from('activity_days').upsert({
+        user_id: currentUser.id, day: t, phrase_ids: ids, goal_met: metNow,
+        updated_at: new Date().toISOString()
+      }, { onConflict: 'user_id,day' });
+      if (error) console.warn('markPhraseStudied:', error.message);
+    }
+
+    // Calcular racha actual y mejor racha a partir de los días con meta cumplida
+    function computeStreaks() {
+      const met = new Set(activityDays.filter(a => a.goal_met).map(a => a.day));
+      // Racha actual: cuenta hacia atrás desde hoy (o ayer si hoy aún no se cumple)
+      let current = 0;
+      let d = new Date();
+      if (!met.has(todayStr(d))) d.setDate(d.getDate() - 1);
+      while (met.has(todayStr(d))) { current++; d.setDate(d.getDate() - 1); }
+      // Mejor racha: el tramo consecutivo más largo
+      const sorted = [...met].sort();
+      let best = 0, run = 0, prev = null;
+      sorted.forEach(ds => {
+        if (prev) {
+          const diff = (new Date(ds) - new Date(prev)) / 86400000;
+          run = (Math.round(diff) === 1) ? run + 1 : 1;
+        } else run = 1;
+        best = Math.max(best, run);
+        prev = ds;
+      });
+      return { current, best, totalActive: activityDays.length };
+    }
+
+    function updateStreakUI() {
+      const { current } = computeStreaks();
+      const count = studiedTodayIds.size;
+      document.getElementById('streak-count').textContent = current;
+      document.getElementById('streak-today').textContent = count;
+      const pct = Math.min(100, Math.round((count / DAILY_GOAL) * 100));
+      document.getElementById('streak-mini-fill').style.width = pct + '%';
+      document.getElementById('streak-done').classList.toggle('hidden', !dailyGoalMet);
+    }
+
+    function celebrateGoal() {
+      const flame = document.getElementById('streak-flame');
+      flame.classList.remove('pop'); void flame.offsetWidth; flame.classList.add('pop');
     }
 
     function shuffle(arr) {
@@ -1137,7 +1308,33 @@
           </div>`;
       }).join('');
 
+      // Racha + calendario
+      renderStreakDashboard();
+
       document.getElementById('progress-modal').classList.remove('hidden');
+    }
+
+    function renderStreakDashboard() {
+      const { current, best, totalActive } = computeStreaks();
+      document.getElementById('prog-streak-cur').textContent   = current;
+      document.getElementById('prog-streak-best').textContent  = best;
+      document.getElementById('prog-streak-total').textContent = totalActive;
+
+      // Calendario de los últimos 14 días
+      const byDay = {};
+      activityDays.forEach(a => { byDay[a.day] = a; });
+      const cells = [];
+      for (let i = 13; i >= 0; i--) {
+        const d = new Date(); d.setDate(d.getDate() - i);
+        const ds = todayStr(d);
+        const rec = byDay[ds];
+        let cls = 'cal-cell';
+        if (rec && rec.goal_met) cls += ' met';
+        else if (rec && rec.count > 0) cls += ' some';
+        if (i === 0) cls += ' today';
+        cells.push(`<div class="${cls}" title="${ds}${rec ? ' · ' + rec.count + ' frases' : ''}">${d.getDate()}</div>`);
+      }
+      document.getElementById('prog-calendar').innerHTML = cells.join('');
     }
 
     function closeProgressDashboard() {
@@ -1160,6 +1357,7 @@
       try {
         if (allPhrases.length === 0) allPhrases = await fetchAllPhrases();
         await loadProgress();
+        await loadStreak();
         document.getElementById('loading').classList.add('hidden');
         loadCategories();
         loadPhrases();
@@ -1339,7 +1537,12 @@
       updateStats();
     }
 
-    function flipCard()  { document.getElementById('flashcard').classList.toggle('flipped'); }
+    function flipCard()  {
+      const card = document.getElementById('flashcard');
+      card.classList.toggle('flipped');
+      // Al revelar la traducción cuenta como "estudiar" esa frase
+      if (card.classList.contains('flipped') && phrases[current]) markPhraseStudied(phrases[current].id);
+    }
     function nextCard()  { if (current < phrases.length - 1) showCard(current + 1); else { document.getElementById('main-content').classList.add('hidden'); document.getElementById('completed').classList.remove('hidden'); } }
     function prevCard()  { if (current > 0) showCard(current - 1); }
     function updateStats() {
@@ -1436,6 +1639,7 @@
         const autoStatus = score.pct >= 80 ? 'mastered' : undefined;
         saveProgress(p.id, { status: autoStatus, score: score.pct })
           .then(() => { reflectMastered(p.id); updateStats(); });
+        markPhraseStudied(p.id);
       }
       showPronunResult(expected, said, score);
     }
