@@ -575,6 +575,85 @@
     .prog-cat-val  { color: var(--text-muted); }
     .prog-cat-bar  { height: 8px; background: var(--border); border-radius: 99px; overflow: hidden; }
     .prog-cat-fill { height: 100%; background: linear-gradient(90deg,#10b981,#34d399); border-radius: 99px; transition: width 0.6s ease; }
+
+    /* ── Main navigation tabs ── */
+    .main-nav {
+      display: flex; gap: 0.5rem; justify-content: center; flex-wrap: wrap;
+      margin-bottom: 1.75rem; width: 100%; max-width: 560px;
+    }
+    .nav-tab {
+      background: #15152e; border: 1px solid var(--border); color: var(--text-muted);
+      padding: 0.5rem 1.1rem; border-radius: 12px; font-size: 0.9rem; font-weight: 700;
+      cursor: pointer; transition: all 0.2s; display: flex; align-items: center; gap: 0.4rem;
+    }
+    .nav-tab:hover { color: var(--text); border-color: var(--accent2); }
+    .nav-tab.active {
+      background: linear-gradient(135deg,#7c3aed,#a855f7); color: #fff; border-color: transparent;
+      box-shadow: 0 4px 14px rgba(124,58,237,0.4);
+    }
+
+    /* ── Study views (grammar / verbs) ── */
+    .study-view { width: 100%; max-width: 620px; animation: fadeIn 0.4s ease; }
+
+    /* Category pills for grammar */
+    .study-cats { display: flex; flex-wrap: wrap; gap: 0.5rem; justify-content: center; margin-bottom: 1.5rem; }
+
+    /* Grammar cards */
+    .gram-cat-title {
+      font-size: 0.78rem; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase;
+      color: #a855f7; margin: 1.25rem 0 0.75rem;
+    }
+    .gram-card {
+      background: #13132b; border: 1px solid var(--border); border-radius: 16px;
+      padding: 1.1rem 1.25rem; margin-bottom: 0.85rem;
+    }
+    .gram-title { font-size: 1.05rem; font-weight: 800; color: #f1f5f9; margin-bottom: 0.6rem; }
+    .gram-formula {
+      background: rgba(124,58,237,0.12); border: 1px solid rgba(168,85,247,0.3);
+      color: #c4b5fd; font-family: 'Consolas', monospace; font-size: 0.82rem;
+      padding: 0.4rem 0.7rem; border-radius: 8px; display: inline-block; margin-bottom: 0.7rem;
+    }
+    .gram-example { display: flex; align-items: flex-start; gap: 0.5rem; margin-bottom: 0.15rem; }
+    .gram-en { color: #d1fae5; font-weight: 600; font-size: 0.95rem; }
+    .gram-es { color: var(--text-muted); font-size: 0.85rem; font-style: italic; margin-bottom: 0.6rem; }
+    .gram-usage { color: var(--text-muted); font-size: 0.82rem; line-height: 1.5; border-top: 1px solid var(--border); padding-top: 0.6rem; }
+    .gram-audio {
+      background: rgba(251,191,36,0.12); color: #fbbf24; border: 1px solid rgba(251,191,36,0.3);
+      border-radius: 6px; width: 26px; height: 26px; flex-shrink: 0; cursor: pointer;
+      display: flex; align-items: center; justify-content: center; padding: 0; transition: all 0.2s;
+    }
+    .gram-audio:hover { background: rgba(251,191,36,0.25); }
+    .gram-audio.speaking { animation: pulse-yellow 0.8s ease-in-out infinite alternate; }
+
+    /* Verbs */
+    .verb-search {
+      width: 100%; background: #1a1a35; border: 1px solid var(--border); border-radius: 12px;
+      padding: 0.75rem 1rem; color: var(--text); font-size: 0.9rem; margin-bottom: 0.75rem;
+    }
+    .verb-search:focus { outline: none; border-color: var(--accent2); }
+    .verb-search::placeholder { color: #5a5a7a; }
+    .verb-count { font-size: 0.78rem; color: var(--text-muted); margin-bottom: 0.75rem; text-align: center; }
+    .verb-head {
+      display: flex; align-items: center; gap: 0.5rem; padding: 0 0.9rem 0.4rem;
+      font-size: 0.68rem; font-weight: 700; letter-spacing: 0.05em; text-transform: uppercase; color: var(--text-muted);
+    }
+    .verb-row {
+      display: flex; align-items: center; gap: 0.5rem;
+      background: #13132b; border: 1px solid var(--border); border-radius: 12px;
+      padding: 0.6rem 0.9rem; margin-bottom: 0.4rem;
+    }
+    .verb-forms { display: flex; flex: 1.4; gap: 0.4rem; min-width: 0; flex-wrap: wrap; }
+    .vf { font-size: 0.85rem; color: #e2e8f0; flex: 1; min-width: 70px; }
+    .vf.base { font-weight: 700; color: #a855f7; }
+    .verb-tr { flex: 1; font-size: 0.82rem; color: var(--text-muted); min-width: 90px; }
+    .verb-audio {
+      background: rgba(251,191,36,0.12); color: #fbbf24; border: 1px solid rgba(251,191,36,0.3);
+      border-radius: 7px; width: 32px; height: 32px; flex-shrink: 0; cursor: pointer;
+      display: flex; align-items: center; justify-content: center; padding: 0; transition: all 0.2s;
+    }
+    .verb-audio:hover { background: rgba(251,191,36,0.25); transform: scale(1.08); }
+    .verb-audio.speaking { animation: pulse-yellow 0.8s ease-in-out infinite alternate; }
+    .verb-head span:nth-child(1), .verb-row .vf:nth-child(1) { }
   </style>
 </head>
 <body>
@@ -619,6 +698,33 @@
 
   <h1>English Flashcards</h1>
   <p class="subtitle">Practice your English phrases</p>
+
+  <!-- Main navigation -->
+  <div class="main-nav hidden" id="main-nav">
+    <button class="nav-tab active" data-view="flashcards" onclick="switchView('flashcards', this)">🃏 Tarjetas</button>
+    <button class="nav-tab" data-view="grammar" onclick="switchView('grammar', this)">📖 Gramática</button>
+    <button class="nav-tab" data-view="verbs" onclick="switchView('verbs', this)">📝 Verbos</button>
+  </div>
+
+  <!-- ── VIEW: Grammar ── -->
+  <div class="study-view hidden" id="view-grammar">
+    <div class="study-cats" id="grammar-cats"></div>
+    <div id="grammar-content"><div class="no-data">Cargando gramática...</div></div>
+  </div>
+
+  <!-- ── VIEW: Irregular verbs ── -->
+  <div class="study-view hidden" id="view-verbs">
+    <input class="verb-search" id="verb-search" placeholder="🔎 Buscar verbo (en inglés o español)..." oninput="renderVerbs()" />
+    <div class="verb-count" id="verb-count"></div>
+    <div class="verb-head">
+      <div style="flex:1.4; display:flex; gap:0.4rem;">
+        <span style="flex:1;">Infinitivo</span><span style="flex:1;">Pasado</span><span style="flex:1;">Participio</span>
+      </div>
+      <span style="flex:1;">Traducción</span>
+      <span style="width:32px;"></span>
+    </div>
+    <div id="verb-table"><div class="no-data">Cargando verbos...</div></div>
+  </div>
 
   <!-- Category filter -->
   <div class="category-bar hidden" id="category-bar"></div>
@@ -1411,7 +1517,138 @@
         document.getElementById('user-badge').classList.add('hidden');
         document.getElementById('btn-progress').style.display = 'none';
       }
+      document.getElementById('main-nav').classList.remove('hidden');
       loadAppData();
+    }
+
+    // ╔══════════════════════════════════════════════════════════╗
+    // ║  NAVEGACIÓN: Tarjetas / Gramática / Verbos               ║
+    // ╚══════════════════════════════════════════════════════════╝
+    function switchView(name, el) {
+      document.querySelectorAll('.nav-tab').forEach(t => t.classList.remove('active'));
+      if (el) el.classList.add('active');
+      const isCards = name === 'flashcards';
+      // Vista tarjetas
+      document.getElementById('category-bar').classList.toggle('hidden', !isCards || allPhrases.length === 0);
+      document.getElementById('main-content').classList.toggle('hidden', !isCards);
+      document.getElementById('completed').classList.add('hidden');
+      // Vistas de estudio
+      document.getElementById('view-grammar').classList.toggle('hidden', name !== 'grammar');
+      document.getElementById('view-verbs').classList.toggle('hidden', name !== 'verbs');
+      if (name === 'grammar') loadGrammar();
+      if (name === 'verbs')   loadVerbs();
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+
+    // Voz genérica en inglés (para gramática y verbos)
+    async function speakEnglish(text, btn) {
+      if (!('speechSynthesis' in window) || !text) return;
+      window.speechSynthesis.cancel();
+      if (!cachedEngVoice) cachedEngVoice = await getEnglishVoice();
+      const u = new SpeechSynthesisUtterance(text);
+      u.lang = 'en-US'; u.rate = 0.9; u.pitch = 1;
+      if (cachedEngVoice) u.voice = cachedEngVoice;
+      if (btn) {
+        u.onstart = () => btn.classList.add('speaking');
+        u.onend   = () => btn.classList.remove('speaking');
+        u.onerror = () => btn.classList.remove('speaking');
+      }
+      window.speechSynthesis.speak(u);
+    }
+
+    // ── Gramática ─────────────────────────────────────────────────
+    let grammarData = null, activeGrammarCat = 'all';
+
+    async function loadGrammar() {
+      if (grammarData) return;
+      const { data, error } = await sb.from('grammar_topics').select('*').order('sort_order');
+      if (error) {
+        document.getElementById('grammar-content').innerHTML =
+          '<div class="no-data">No pude cargar la gramática. ¿Ya corriste el SQL de <b>grammar_topics</b>?<br><span style="font-size:0.75rem">' + error.message + '</span></div>';
+        return;
+      }
+      grammarData = data || [];
+      // Pills de categoría
+      const cats = [...new Set(grammarData.map(g => g.category))];
+      const pills = ['<div class="cat-chip active" data-gcat="all" onclick="filterGrammar(\'all\', this)">Todo</div>']
+        .concat(cats.map(c => `<div class="cat-chip" data-gcat="${c}" onclick="filterGrammar('${c.replace(/'/g,"\\'")}', this)">${c}</div>`));
+      document.getElementById('grammar-cats').innerHTML = pills.join('');
+      renderGrammar();
+    }
+
+    function filterGrammar(cat, el) {
+      activeGrammarCat = cat;
+      document.querySelectorAll('#grammar-cats .cat-chip').forEach(c => c.classList.remove('active'));
+      if (el) el.classList.add('active');
+      renderGrammar();
+    }
+
+    function renderGrammar() {
+      const list = activeGrammarCat === 'all'
+        ? grammarData
+        : grammarData.filter(g => g.category === activeGrammarCat);
+      let html = '', lastCat = null;
+      list.forEach(g => {
+        if (g.category !== lastCat) { html += `<div class="gram-cat-title">${g.category}</div>`; lastCat = g.category; }
+        const enEsc = (g.example_en || '').replace(/'/g, "\\'").replace(/"/g, '&quot;');
+        html += `
+          <div class="gram-card">
+            <div class="gram-title">${g.title}</div>
+            ${g.structure ? `<div class="gram-formula">${g.structure}</div>` : ''}
+            <div class="gram-example">
+              <button class="gram-audio" onclick="speakEnglish('${enEsc}', this)" title="Escuchar">
+                <svg width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M15.54 8.46a5 5 0 0 1 0 7.07"/></svg>
+              </button>
+              <span class="gram-en">${g.example_en || ''}</span>
+            </div>
+            <div class="gram-es">${g.example_es || ''}</div>
+            ${g.usage ? `<div class="gram-usage">💡 ${g.usage}</div>` : ''}
+          </div>`;
+      });
+      document.getElementById('grammar-content').innerHTML = html || '<div class="no-data">Sin contenido.</div>';
+    }
+
+    // ── Verbos irregulares ────────────────────────────────────────
+    let verbsData = null;
+
+    async function loadVerbs() {
+      if (verbsData) return;
+      const { data, error } = await sb.from('irregular_verbs').select('*').order('sort_order');
+      if (error) {
+        document.getElementById('verb-table').innerHTML =
+          '<div class="no-data">No pude cargar los verbos. ¿Ya corriste el SQL de <b>irregular_verbs</b>?<br><span style="font-size:0.75rem">' + error.message + '</span></div>';
+        return;
+      }
+      verbsData = data || [];
+      renderVerbs();
+    }
+
+    function renderVerbs() {
+      if (!verbsData) return;
+      const q = (document.getElementById('verb-search').value || '').toLowerCase().trim();
+      const list = q
+        ? verbsData.filter(v =>
+            v.infinitive.toLowerCase().includes(q) ||
+            v.past_simple.toLowerCase().includes(q) ||
+            v.past_participle.toLowerCase().includes(q) ||
+            v.translation.toLowerCase().includes(q))
+        : verbsData;
+      document.getElementById('verb-count').textContent = `${list.length} verbo${list.length === 1 ? '' : 's'}`;
+      document.getElementById('verb-table').innerHTML = list.map(v => {
+        const say = `${v.infinitive}, ${v.past_simple.replace(/\s*\/\s*/g,' or ')}, ${v.past_participle.replace(/\s*\/\s*/g,' or ')}`.replace(/'/g,"\\'");
+        return `
+          <div class="verb-row">
+            <div class="verb-forms">
+              <span class="vf base">${v.infinitive}</span>
+              <span class="vf">${v.past_simple}</span>
+              <span class="vf">${v.past_participle}</span>
+            </div>
+            <div class="verb-tr">${v.translation}</div>
+            <button class="verb-audio" onclick="speakEnglish('${say}', this)" title="Escuchar">
+              <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M15.54 8.46a5 5 0 0 1 0 7.07"/></svg>
+            </button>
+          </div>`;
+      }).join('') || '<div class="no-data">No se encontraron verbos.</div>';
     }
 
     function toggleAuthMode() {
