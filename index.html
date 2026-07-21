@@ -654,6 +654,35 @@
     .verb-audio:hover { background: rgba(251,191,36,0.25); transform: scale(1.08); }
     .verb-audio.speaking { animation: pulse-yellow 0.8s ease-in-out infinite alternate; }
     .verb-head span:nth-child(1), .verb-row .vf:nth-child(1) { }
+
+    /* ── Linking words (conectores) ── */
+    .link-card {
+      background: #13132b; border: 1px solid var(--border); border-radius: 16px;
+      padding: 1rem 1.15rem; margin-bottom: 0.75rem;
+    }
+    .link-head { display: flex; align-items: baseline; gap: 0.6rem; flex-wrap: wrap; margin-bottom: 0.65rem; }
+    .link-word {
+      font-size: 1.15rem; font-weight: 800;
+      background: linear-gradient(135deg,#38bdf8,#0ea5e9);
+      -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+    }
+    .link-tr { font-size: 0.85rem; color: var(--text-muted); font-style: italic; }
+    .link-example { display: flex; align-items: flex-start; gap: 0.5rem; margin-bottom: 0.15rem; }
+    .link-en { color: #d1fae5; font-weight: 600; font-size: 0.93rem; line-height: 1.4; }
+    .link-es { color: var(--text-muted); font-size: 0.83rem; font-style: italic; margin-bottom: 0.6rem; }
+    .link-usage { color: var(--text-muted); font-size: 0.8rem; line-height: 1.5; border-top: 1px solid var(--border); padding-top: 0.55rem; }
+    .link-audio {
+      background: rgba(56,189,248,0.12); color: #38bdf8; border: 1px solid rgba(56,189,248,0.3);
+      border-radius: 6px; width: 26px; height: 26px; flex-shrink: 0; cursor: pointer;
+      display: flex; align-items: center; justify-content: center; padding: 0; transition: all 0.2s;
+    }
+    .link-audio:hover { background: rgba(56,189,248,0.25); }
+    .link-audio.speaking { animation: pulse-cyan 0.8s ease-in-out infinite alternate; }
+    @keyframes pulse-cyan { from { box-shadow: 0 0 6px rgba(56,189,248,0.3); } to { box-shadow: 0 0 20px rgba(56,189,248,0.7); } }
+    .link-cat-title {
+      font-size: 0.78rem; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase;
+      color: #38bdf8; margin: 1.25rem 0 0.75rem;
+    }
   </style>
 </head>
 <body>
@@ -704,6 +733,15 @@
     <button class="nav-tab active" data-view="flashcards" onclick="switchView('flashcards', this)">🃏 Tarjetas</button>
     <button class="nav-tab" data-view="grammar" onclick="switchView('grammar', this)">📖 Gramática</button>
     <button class="nav-tab" data-view="verbs" onclick="switchView('verbs', this)">📝 Verbos</button>
+    <button class="nav-tab" data-view="linkers" onclick="switchView('linkers', this)">🔗 Conectores</button>
+  </div>
+
+  <!-- ── VIEW: Linking words ── -->
+  <div class="study-view hidden" id="view-linkers">
+    <input class="verb-search" id="linker-search" placeholder="🔎 Buscar conector (inglés o español)..." oninput="renderLinkers()" />
+    <div class="study-cats" id="linker-cats"></div>
+    <div class="verb-count" id="linker-count"></div>
+    <div id="linker-content"><div class="no-data">Cargando conectores...</div></div>
   </div>
 
   <!-- ── VIEW: Grammar ── -->
@@ -1535,8 +1573,10 @@
       // Vistas de estudio
       document.getElementById('view-grammar').classList.toggle('hidden', name !== 'grammar');
       document.getElementById('view-verbs').classList.toggle('hidden', name !== 'verbs');
+      document.getElementById('view-linkers').classList.toggle('hidden', name !== 'linkers');
       if (name === 'grammar') loadGrammar();
       if (name === 'verbs')   loadVerbs();
+      if (name === 'linkers') loadLinkers();
       window.scrollTo({ top: 0, behavior: 'smooth' });
     }
 
@@ -1649,6 +1689,71 @@
             </button>
           </div>`;
       }).join('') || '<div class="no-data">No se encontraron verbos.</div>';
+    }
+
+    // ── Conectores (linking words) ─────────────────────────────────
+    let linkersData = null, activeLinkerCat = 'all';
+
+    async function loadLinkers() {
+      if (linkersData) return;
+      const { data, error } = await sb.from('linking_words').select('*').order('sort_order');
+      if (error) {
+        document.getElementById('linker-content').innerHTML =
+          '<div class="no-data">No pude cargar los conectores. ¿Ya corriste el SQL de <b>linking_words</b>?<br><span style="font-size:0.75rem">' + error.message + '</span></div>';
+        return;
+      }
+      linkersData = data || [];
+      const cats = [...new Set(linkersData.map(l => l.category))];
+      const pills = ['<div class="cat-chip active" data-lcat="all" onclick="filterLinkers(\'all\', this)">Todos</div>']
+        .concat(cats.map(c => `<div class="cat-chip" data-lcat="${c}" onclick="filterLinkers('${c.replace(/'/g,"\\'")}', this)">${c}</div>`));
+      document.getElementById('linker-cats').innerHTML = pills.join('');
+      renderLinkers();
+    }
+
+    function filterLinkers(cat, el) {
+      activeLinkerCat = cat;
+      document.querySelectorAll('#linker-cats .cat-chip').forEach(c => c.classList.remove('active'));
+      if (el) el.classList.add('active');
+      renderLinkers();
+    }
+
+    function renderLinkers() {
+      if (!linkersData) return;
+      const q = (document.getElementById('linker-search').value || '').toLowerCase().trim();
+      let list = activeLinkerCat === 'all'
+        ? linkersData
+        : linkersData.filter(l => l.category === activeLinkerCat);
+      if (q) {
+        list = list.filter(l =>
+          l.word.toLowerCase().includes(q) ||
+          l.translation.toLowerCase().includes(q) ||
+          l.example_en.toLowerCase().includes(q) ||
+          l.example_es.toLowerCase().includes(q));
+      }
+      document.getElementById('linker-count').textContent =
+        `${list.length} conector${list.length === 1 ? '' : 'es'}`;
+
+      let html = '', lastCat = null;
+      list.forEach(l => {
+        if (l.category !== lastCat) { html += `<div class="link-cat-title">${l.category}</div>`; lastCat = l.category; }
+        const say = (l.example_en || '').replace(/'/g, "\\'").replace(/"/g, '&quot;');
+        html += `
+          <div class="link-card">
+            <div class="link-head">
+              <span class="link-word">${l.word}</span>
+              <span class="link-tr">${l.translation}</span>
+            </div>
+            <div class="link-example">
+              <button class="link-audio" onclick="speakEnglish('${say}', this)" title="Escuchar">
+                <svg width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M15.54 8.46a5 5 0 0 1 0 7.07"/></svg>
+              </button>
+              <span class="link-en">${l.example_en}</span>
+            </div>
+            <div class="link-es">${l.example_es}</div>
+            ${l.usage ? `<div class="link-usage">💡 ${l.usage}</div>` : ''}
+          </div>`;
+      });
+      document.getElementById('linker-content').innerHTML = html || '<div class="no-data">No se encontraron conectores.</div>';
     }
 
     function toggleAuthMode() {
