@@ -735,6 +735,41 @@
 
     .quiz-res-txt { text-align: center; font-size: 1.05rem; font-weight: 700; margin-bottom: 0.35rem; }
     .quiz-res-msg { text-align: center; color: var(--text-muted); font-size: 0.88rem; margin-bottom: 1.5rem; }
+
+    /* Fallados en la ronda */
+    .miss-box {
+      background: rgba(239,68,68,0.08); border: 1px solid rgba(239,68,68,0.25);
+      border-radius: 12px; padding: 0.8rem 1rem; margin-bottom: 1.25rem;
+    }
+    .miss-title { font-size: 0.75rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: #f87171; margin-bottom: 0.5rem; }
+    .miss-item { font-size: 0.85rem; color: var(--text); margin-bottom: 0.2rem; }
+    .miss-item b { color: #fca5a5; }
+
+    /* ── Panel de progreso de conectores ── */
+    .lp-summary { display: grid; grid-template-columns: repeat(3, 1fr); gap: 0.6rem; margin-bottom: 1.5rem; }
+    .lp-card { background: #1a1a35; border: 1px solid var(--border); border-radius: 14px; padding: 0.85rem; text-align: center; }
+    .lp-num { font-size: 1.5rem; font-weight: 800; }
+    .lp-label { font-size: 0.68rem; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.06em; margin-top: 0.15rem; }
+    .lp-section-title {
+      font-size: 0.75rem; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase;
+      color: var(--text-muted); margin: 1.25rem 0 0.7rem; display: flex; align-items: center; gap: 0.5rem;
+    }
+    .lp-section-title::after { content: ''; flex: 1; height: 1px; background: var(--border); }
+    .lp-row {
+      display: flex; align-items: center; gap: 0.7rem;
+      background: #13132b; border: 1px solid var(--border); border-radius: 12px;
+      padding: 0.6rem 0.9rem; margin-bottom: 0.4rem;
+    }
+    .lp-row.weak   { border-color: rgba(239,68,68,0.3); }
+    .lp-row.strong { border-color: rgba(16,185,129,0.3); }
+    .lp-word { font-weight: 800; font-size: 0.92rem; flex: 1; min-width: 0; }
+    .lp-row.weak   .lp-word { color: #fca5a5; }
+    .lp-row.strong .lp-word { color: #6ee7b7; }
+    .lp-tr { font-size: 0.78rem; color: var(--text-muted); flex: 1; min-width: 0; }
+    .lp-acc { font-size: 0.82rem; font-weight: 800; white-space: nowrap; }
+    .lp-row.weak   .lp-acc { color: #f87171; }
+    .lp-row.strong .lp-acc { color: #10b981; }
+    .lp-hits { font-size: 0.7rem; color: var(--text-muted); white-space: nowrap; }
   </style>
 </head>
 <body>
@@ -793,6 +828,7 @@
     <div class="linker-modes">
       <button class="mode-btn active" id="mode-study" onclick="setLinkerMode('study')">📖 Estudiar</button>
       <button class="mode-btn" id="mode-quiz" onclick="setLinkerMode('quiz')">🎯 Practicar</button>
+      <button class="mode-btn" id="mode-stats" onclick="setLinkerMode('stats')">📊 Progreso</button>
     </div>
 
     <!-- Modo estudiar -->
@@ -823,6 +859,9 @@
       </div>
       <div id="quiz-result" class="hidden"></div>
     </div>
+
+    <!-- Modo progreso -->
+    <div id="linker-stats" class="hidden"></div>
   </div>
 
   <!-- ── VIEW: Grammar ── -->
@@ -1784,6 +1823,7 @@
         return;
       }
       linkersData = data || [];
+      await loadLinkerProgress();
       const cats = [...new Set(linkersData.map(l => l.category))];
       const pills = ['<div class="cat-chip active" data-lcat="all" onclick="filterLinkers(\'all\', this)">Todos</div>']
         .concat(cats.map(c => `<div class="cat-chip" data-lcat="${c}" onclick="filterLinkers('${c.replace(/'/g,"\\'")}', this)">${c}</div>`));
@@ -1841,15 +1881,60 @@
     // ║  MODO PRÁCTICA de conectores (completa la frase)         ║
     // ╚══════════════════════════════════════════════════════════╝
     const QUIZ_SIZE = 10;
-    let quiz = [], quizIndex = 0, quizScore = 0, quizAnswered = false;
+    let quiz = [], quizIndex = 0, quizScore = 0, quizAnswered = false, quizMissed = [];
+    let linkerProgress = new Map();   // linker_id -> { attempts, correct, last_result }
 
     function setLinkerMode(mode) {
-      const study = mode === 'study';
-      document.getElementById('mode-study').classList.toggle('active', study);
-      document.getElementById('mode-quiz').classList.toggle('active', !study);
-      document.getElementById('linker-study').classList.toggle('hidden', !study);
-      document.getElementById('linker-quiz').classList.toggle('hidden', study);
-      if (!study) startQuiz();
+      ['study', 'quiz', 'stats'].forEach(m =>
+        document.getElementById('mode-' + m).classList.toggle('active', m === mode));
+      document.getElementById('linker-study').classList.toggle('hidden', mode !== 'study');
+      document.getElementById('linker-quiz').classList.toggle('hidden',  mode !== 'quiz');
+      document.getElementById('linker-stats').classList.toggle('hidden', mode !== 'stats');
+      if (mode === 'quiz')  startQuiz();
+      if (mode === 'stats') renderLinkerStats();
+    }
+
+    // ── Guardar / cargar progreso del quiz ────────────────────────
+    async function loadLinkerProgress() {
+      linkerProgress = new Map();
+      if (!currentUser) return;
+      const { data, error } = await sb.from('linker_progress')
+        .select('linker_id,attempts,correct,last_result');
+      if (error) { console.warn('linker_progress:', error.message); return; }
+      (data || []).forEach(r => linkerProgress.set(r.linker_id, {
+        attempts: r.attempts, correct: r.correct, last_result: r.last_result
+      }));
+    }
+
+    async function saveLinkerAnswer(linkerId, wasCorrect) {
+      if (!currentUser) return;
+      const prev = linkerProgress.get(linkerId) || { attempts: 0, correct: 0 };
+      const row = {
+        user_id:   currentUser.id,
+        linker_id: linkerId,
+        attempts:  prev.attempts + 1,
+        correct:   prev.correct + (wasCorrect ? 1 : 0),
+        last_result: wasCorrect,
+        last_practiced: new Date().toISOString()
+      };
+      linkerProgress.set(linkerId, { attempts: row.attempts, correct: row.correct, last_result: wasCorrect });
+      const { error } = await sb.from('linker_progress')
+        .upsert(row, { onConflict: 'user_id,linker_id' });
+      if (error) console.warn('saveLinkerAnswer:', error.message);
+    }
+
+    // Calcula estadísticas: qué domina y qué debe reforzar
+    function linkerStats() {
+      const rows = [];
+      (linkersData || []).forEach(l => {
+        const p = linkerProgress.get(l.id);
+        if (p && p.attempts > 0) rows.push({ linker: l, ...p, acc: p.correct / p.attempts });
+      });
+      const totalAttempts = rows.reduce((a, b) => a + b.attempts, 0);
+      const totalCorrect  = rows.reduce((a, b) => a + b.correct, 0);
+      const weak   = rows.filter(r => r.acc < 0.7).sort((a, b) => a.acc - b.acc);
+      const strong = rows.filter(r => r.acc >= 0.8 && r.attempts >= 2).sort((a, b) => b.acc - a.acc);
+      return { rows, practiced: rows.length, totalAttempts, totalCorrect, weak, strong };
     }
 
     // Ubica el conector dentro de su ejemplo para poder dejar el hueco
@@ -1861,18 +1946,27 @@
       return { before: l.example_en.slice(0, idx), after: l.example_en.slice(idx + term.length) };
     }
 
-    function startQuiz() {
+    function startQuiz(weakOnly) {
       if (!linkersData) return;
-      const pool = (activeLinkerCat === 'all' ? linkersData : linkersData.filter(l => l.category === activeLinkerCat))
-                     .filter(l => linkerBlank(l));
+      let base;
+      if (weakOnly === true) {
+        const weakIds = new Set(linkerStats().weak.map(w => w.linker.id));
+        base = linkersData.filter(l => weakIds.has(l.id));
+      } else {
+        base = activeLinkerCat === 'all' ? linkersData : linkersData.filter(l => l.category === activeLinkerCat);
+      }
+      const pool = base.filter(l => linkerBlank(l));
       const msg = document.getElementById('quiz-msg');
       if (pool.length < 4) {
-        msg.innerHTML = '<div class="no-data">Pocos conectores en esta categoría para practicar.<br>Elige <b>Todos</b> u otra categoría en el modo Estudiar.</div>';
+        msg.innerHTML = weakOnly === true
+          ? '<div class="no-data">Aún no tienes suficientes conectores por reforzar. ¡Practica un poco más primero! 💪</div>'
+          : '<div class="no-data">Pocos conectores en esta categoría para practicar.<br>Elige <b>Todos</b> u otra categoría en el modo Estudiar.</div>';
         document.getElementById('quiz-play').classList.add('hidden');
         document.getElementById('quiz-result').classList.add('hidden');
         return;
       }
       msg.innerHTML = '';
+      quizMissed = [];
       const chosen = shuffle(pool).slice(0, Math.min(QUIZ_SIZE, pool.length));
       quiz = chosen.map(l => {
         const distract = shuffle(linkersData.filter(x => x.word !== l.word)).slice(0, 3);
@@ -1906,6 +2000,8 @@
       const q = quiz[quizIndex];
       const correct = i === q.answer;
       if (correct) quizScore++;
+      else quizMissed.push(q.linker);
+      saveLinkerAnswer(q.linker.id, correct);   // guarda en tu perfil
       q.options.forEach((o, idx) => {
         const btn = document.getElementById('qopt-' + idx);
         if (idx === q.answer)    btn.classList.add('ok');
@@ -1941,13 +2037,76 @@
                 : pct >= 80   ? '🎉 ¡Muy bien! Casi todos correctos.'
                 : pct >= 50   ? '💪 Buen intento. Repasa los que fallaste.'
                 :               '📖 Vuelve al modo Estudiar y luego inténtalo de nuevo.';
+      const missHtml = quizMissed.length ? `
+        <div class="miss-box">
+          <div class="miss-title">📌 Para reforzar de esta ronda</div>
+          ${quizMissed.map(l => `<div class="miss-item"><b>${l.word}</b> — ${l.translation}</div>`).join('')}
+        </div>` : '';
+      const saveNote = currentUser ? '' :
+        '<div class="quiz-res-msg" style="color:#fbbf24">💡 Inicia sesión para guardar tu progreso y saber qué reforzar.</div>';
+
       document.getElementById('quiz-result').innerHTML = `
         <div class="score-circle ${cls}"><span>${pct}%</span><span class="score-circle-label">ACIERTOS</span></div>
         <div class="quiz-res-txt">${quizScore} de ${quiz.length} correctas</div>
         <div class="quiz-res-msg">${msg}</div>
+        ${missHtml}
+        ${saveNote}
         <button class="btn btn-primary" style="width:100%; justify-content:center; margin-bottom:0.6rem;" onclick="startQuiz()">🔄 Practicar de nuevo</button>
+        ${currentUser ? '<button class="btn btn-secondary" style="width:100%; justify-content:center; margin-bottom:0.6rem;" onclick="setLinkerMode(\'stats\')">📊 Ver mi progreso</button>' : ''}
         <button class="btn btn-secondary" style="width:100%; justify-content:center;" onclick="setLinkerMode('study')">📖 Volver a estudiar</button>`;
       document.getElementById('quiz-result').classList.remove('hidden');
+    }
+
+    // ── Panel: Mi progreso de conectores ──────────────────────────
+    function practiceWeak() {
+      setLinkerMode('quiz');
+      startQuiz(true);
+    }
+
+    function renderLinkerStats() {
+      const box = document.getElementById('linker-stats');
+      if (!currentUser) {
+        box.innerHTML = '<div class="no-data">🔐 Inicia sesión para guardar y ver tu progreso de conectores.</div>';
+        return;
+      }
+      if (!linkersData) { box.innerHTML = '<div class="no-data">Cargando...</div>'; return; }
+
+      const s = linkerStats();
+      if (s.practiced === 0) {
+        box.innerHTML = '<div class="no-data">Todavía no has practicado conectores.<br>Ve a <b>🎯 Practicar</b> y haz tu primer quiz.</div>';
+        return;
+      }
+      const acc = s.totalAttempts ? Math.round(s.totalCorrect / s.totalAttempts * 100) : 0;
+      const cls = acc >= 80 ? 'score-circle-great' : acc >= 50 ? 'score-circle-good' : 'score-circle-try';
+
+      const rowHtml = (r, kind) => `
+        <div class="lp-row ${kind}">
+          <span class="lp-word">${r.linker.word}</span>
+          <span class="lp-tr">${r.linker.translation}</span>
+          <span class="lp-acc">${Math.round(r.acc * 100)}%</span>
+          <span class="lp-hits">${r.correct}/${r.attempts}</span>
+        </div>`;
+
+      box.innerHTML = `
+        <div class="score-circle ${cls}"><span>${acc}%</span><span class="score-circle-label">GLOBAL</span></div>
+        <div class="lp-summary">
+          <div class="lp-card"><div class="lp-num" style="color:#a855f7">${s.practiced}</div><div class="lp-label">Practicados</div></div>
+          <div class="lp-card"><div class="lp-num" style="color:#10b981">${s.strong.length}</div><div class="lp-label">Dominados</div></div>
+          <div class="lp-card"><div class="lp-num" style="color:#f87171">${s.weak.length}</div><div class="lp-label">Por reforzar</div></div>
+        </div>
+
+        ${s.weak.length ? `
+          <div class="lp-section-title">🔴 Necesitas reforzar</div>
+          ${s.weak.slice(0, 20).map(r => rowHtml(r, 'weak')).join('')}
+          ${s.weak.length >= 4 ? `<button class="btn btn-primary" style="width:100%; justify-content:center; margin-top:0.8rem;" onclick="practiceWeak()">🎯 Practicar solo estos</button>` : ''}
+        ` : '<div class="lp-section-title">🎉 Sin conectores por reforzar</div>'}
+
+        ${s.strong.length ? `
+          <div class="lp-section-title">🟢 Ya los dominas</div>
+          ${s.strong.slice(0, 20).map(r => rowHtml(r, 'strong')).join('')}
+        ` : ''}
+
+        <button class="btn btn-secondary" style="width:100%; justify-content:center; margin-top:1.25rem;" onclick="setLinkerMode('quiz')">🎯 Hacer otro quiz</button>`;
     }
 
     function toggleAuthMode() {
