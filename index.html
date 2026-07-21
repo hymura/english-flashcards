@@ -787,6 +787,26 @@
     }
     .vform small { display: block; font-size: 0.58rem; font-weight: 600; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.05em; }
     .vform.hl { border-color: #10b981; color: #6ee7b7; }
+
+    /* Pista bajo el enunciado del quiz */
+    .quiz-hint {
+      text-align: center; color: var(--text-muted); font-size: 0.85rem;
+      font-style: italic; margin-top: -0.9rem; margin-bottom: 1.3rem;
+    }
+
+    /* Zona de "dilo en voz alta" */
+    .speak-zone { display: flex; flex-direction: column; align-items: center; gap: 0.7rem; padding: 0.5rem 0; }
+    .btn-mic-big {
+      width: 62px; height: 62px; border-radius: 50%;
+      background: rgba(239,68,68,0.12); color: #f87171; border: 1px solid rgba(239,68,68,0.35);
+      display: flex; align-items: center; justify-content: center; cursor: pointer; transition: all 0.2s;
+    }
+    .btn-mic-big:hover { background: rgba(239,68,68,0.25); transform: scale(1.07); }
+    .btn-mic-big.listening {
+      background: rgba(239,68,68,0.4); color: #fff;
+      animation: pulse-red 0.6s ease-in-out infinite alternate;
+    }
+    .speak-hint { font-size: 0.8rem; color: var(--text-muted); text-align: center; }
   </style>
 </head>
 <body>
@@ -883,8 +903,52 @@
 
   <!-- ── VIEW: Grammar ── -->
   <div class="study-view hidden" id="view-grammar">
-    <div class="study-cats" id="grammar-cats"></div>
-    <div id="grammar-content"><div class="no-data">Cargando gramática...</div></div>
+    <div class="linker-modes">
+      <button class="mode-btn active" id="gmode-study" onclick="setGrammarMode('study')">📖 Estudiar</button>
+      <button class="mode-btn" id="gmode-quiz" onclick="setGrammarMode('quiz')">🎯 Practicar</button>
+      <button class="mode-btn" id="gmode-stats" onclick="setGrammarMode('stats')">📊 Progreso</button>
+    </div>
+
+    <!-- Modo estudiar -->
+    <div id="grammar-study">
+      <div class="study-cats" id="grammar-cats"></div>
+      <div id="grammar-content"><div class="no-data">Cargando gramática...</div></div>
+    </div>
+
+    <!-- Modo práctica -->
+    <div id="grammar-quiz" class="hidden">
+      <div id="gquiz-msg"></div>
+      <div id="gquiz-play">
+        <div class="quiz-top">
+          <span id="gquiz-progress">Pregunta 1</span>
+          <span><span class="quiz-score-val" id="gquiz-score">0</span> aciertos</span>
+        </div>
+        <div class="quiz-bar"><div class="quiz-bar-fill" id="gquiz-bar-fill" style="width:0%"></div></div>
+        <div class="quiz-card">
+          <div class="quiz-type-tag" id="gquiz-type"></div>
+          <div class="quiz-sentence" id="gquiz-prompt"></div>
+          <div class="quiz-hint" id="gquiz-hint"></div>
+          <div class="quiz-options" id="gquiz-options"></div>
+          <div class="speak-zone hidden" id="gquiz-speak">
+            <button class="btn-mic-big" id="gquiz-mic" onclick="toggleQuestionMic()">
+              <svg width="26" height="26" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                <rect x="9" y="2" width="6" height="11" rx="3"/><path d="M5 10a7 7 0 0 0 14 0"/>
+                <line x1="12" y1="19" x2="12" y2="22"/><line x1="9" y1="22" x2="15" y2="22"/>
+              </svg>
+            </button>
+            <div class="speak-hint" id="gquiz-speak-hint">Oprime el micrófono y di la pregunta en voz alta</div>
+          </div>
+          <div class="quiz-feedback hidden" id="gquiz-feedback"></div>
+          <button class="btn btn-primary hidden" id="gquiz-next"
+                  style="width:100%; justify-content:center; margin-top:1.25rem;"
+                  onclick="nextGrammarQuestion()">Siguiente →</button>
+        </div>
+      </div>
+      <div id="gquiz-result" class="hidden"></div>
+    </div>
+
+    <!-- Modo progreso -->
+    <div id="grammar-stats" class="hidden"></div>
   </div>
 
   <!-- ── VIEW: Irregular verbs ── -->
@@ -1779,6 +1843,7 @@
         return;
       }
       grammarData = data || [];
+      await loadGrammarProgress();
       // Pills de categoría
       const cats = [...new Set(grammarData.map(g => g.category))];
       const pills = ['<div class="cat-chip active" data-gcat="all" onclick="filterGrammar(\'all\', this)">Todo</div>']
@@ -1799,24 +1864,419 @@
         ? grammarData
         : grammarData.filter(g => g.category === activeGrammarCat);
       let html = '', lastCat = null;
+      const spk = t => (t || '').replace(/'/g, "\\'").replace(/"/g, '&quot;');
       list.forEach(g => {
         if (g.category !== lastCat) { html += `<div class="gram-cat-title">${g.category}</div>`; lastCat = g.category; }
-        const enEsc = (g.example_en || '').replace(/'/g, "\\'").replace(/"/g, '&quot;');
-        html += `
-          <div class="gram-card">
-            <div class="gram-title">${g.title}</div>
-            ${g.structure ? `<div class="gram-formula">${g.structure}</div>` : ''}
-            <div class="gram-example">
-              <button class="gram-audio" onclick="speakEnglish('${enEsc}', this)" title="Escuchar">
-                <svg width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M15.54 8.46a5 5 0 0 1 0 7.07"/></svg>
-              </button>
-              <span class="gram-en">${g.example_en || ''}</span>
-            </div>
-            <div class="gram-es">${g.example_es || ''}</div>
-            ${g.usage ? `<div class="gram-usage">💡 ${g.usage}</div>` : ''}
-          </div>`;
+        const audioBtn = txt => `
+          <button class="gram-audio" onclick="speakEnglish('${spk(txt)}', this)" title="Escuchar">
+            <svg width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M15.54 8.46a5 5 0 0 1 0 7.07"/></svg>
+          </button>`;
+
+        if (g.kind === 'question') {
+          // Tarjeta de PREGUNTA
+          html += `
+            <div class="gram-card">
+              <div class="gram-example" style="margin-bottom:0.35rem">
+                ${audioBtn(g.title)}
+                <span class="gram-title" style="margin:0">${g.title}</span>
+              </div>
+              <div class="gram-es">${g.title_es || ''}</div>
+              ${g.structure ? `<div class="gram-formula">${g.structure}</div>` : ''}
+              ${g.answer_en ? `
+                <div class="gram-example" style="margin-top:0.4rem">
+                  ${audioBtn(g.answer_en)}
+                  <span class="gram-en">${g.answer_en}</span>
+                </div>
+                <div class="gram-es">${g.answer_es || ''}</div>` : ''}
+              ${g.usage ? `<div class="gram-usage">💡 ${g.usage}</div>` : ''}
+            </div>`;
+        } else {
+          // Tarjeta de TEMA gramatical
+          html += `
+            <div class="gram-card">
+              <div class="gram-title">${g.title}</div>
+              ${g.structure ? `<div class="gram-formula">${g.structure}</div>` : ''}
+              <div class="gram-example">
+                ${audioBtn(g.example_en)}
+                <span class="gram-en">${g.example_en || ''}</span>
+              </div>
+              <div class="gram-es">${g.example_es || ''}</div>
+              ${g.usage ? `<div class="gram-usage">💡 ${g.usage}</div>` : ''}
+            </div>`;
+        }
       });
       document.getElementById('grammar-content').innerHTML = html || '<div class="no-data">Sin contenido.</div>';
+    }
+
+    // ╔══════════════════════════════════════════════════════════╗
+    // ║  PRÁCTICA de preguntas (dentro de Gramática)             ║
+    // ╚══════════════════════════════════════════════════════════╝
+    const GQUIZ_SIZE = 10;
+    let gquiz = [], gquizIndex = 0, gquizScore = 0, gquizAnswered = false, gquizMissed = [];
+    let grammarProgress = new Map();
+
+    function setGrammarMode(mode) {
+      ['study', 'quiz', 'stats'].forEach(m =>
+        document.getElementById('gmode-' + m).classList.toggle('active', m === mode));
+      document.getElementById('grammar-study').classList.toggle('hidden', mode !== 'study');
+      document.getElementById('grammar-quiz').classList.toggle('hidden',  mode !== 'quiz');
+      document.getElementById('grammar-stats').classList.toggle('hidden', mode !== 'stats');
+      if (mode !== 'quiz') stopQuestionMic();
+      if (mode === 'quiz')  startGrammarQuiz();
+      if (mode === 'stats') renderGrammarStats();
+    }
+
+    // ── Progreso ──────────────────────────────────────────────────
+    async function loadGrammarProgress() {
+      grammarProgress = new Map();
+      if (!currentUser) return;
+      const { data, error } = await sb.from('grammar_progress').select('topic_id,attempts,correct,last_result');
+      if (error) { console.warn('grammar_progress:', error.message); return; }
+      (data || []).forEach(r => grammarProgress.set(r.topic_id, {
+        attempts: r.attempts, correct: r.correct, last_result: r.last_result
+      }));
+    }
+
+    async function saveGrammarAnswer(topicId, wasCorrect) {
+      if (!currentUser) return;
+      const prev = grammarProgress.get(topicId) || { attempts: 0, correct: 0 };
+      const row = {
+        user_id: currentUser.id, topic_id: topicId,
+        attempts: prev.attempts + 1,
+        correct:  prev.correct + (wasCorrect ? 1 : 0),
+        last_result: wasCorrect,
+        last_practiced: new Date().toISOString()
+      };
+      grammarProgress.set(topicId, { attempts: row.attempts, correct: row.correct, last_result: wasCorrect });
+      const { error } = await sb.from('grammar_progress').upsert(row, { onConflict: 'user_id,topic_id' });
+      if (error) console.warn('saveGrammarAnswer:', error.message);
+    }
+
+    function grammarStats() {
+      const rows = [];
+      (grammarData || []).filter(g => g.kind === 'question').forEach(g => {
+        const p = grammarProgress.get(g.id);
+        if (p && p.attempts > 0) rows.push({ topic: g, ...p, acc: p.correct / p.attempts });
+      });
+      const totalAttempts = rows.reduce((a, b) => a + b.attempts, 0);
+      const totalCorrect  = rows.reduce((a, b) => a + b.correct, 0);
+      const weak   = rows.filter(r => r.acc < 0.7).sort((a, b) => a.acc - b.acc);
+      const strong = rows.filter(r => r.acc >= 0.8 && r.attempts >= 2).sort((a, b) => b.acc - a.acc);
+      return { rows, practiced: rows.length, totalAttempts, totalCorrect, weak, strong };
+    }
+
+    // ── Auxiliares para el tipo "completa el auxiliar" ────────────
+    const AUXES = ['do','does','did','am','is','are','was','were','have','has','had','will','would','can','could','should','may','might'];
+    const AUX_FAM = {
+      do:['does','did','are'], does:['do','did','is'], did:['do','does','was'],
+      am:['is','are','do'], is:['are','am','was'], are:['is','am','were'],
+      was:['were','is','did'], were:['was','are','did'],
+      have:['has','had','do'], has:['have','had','does'], had:['have','has','did'],
+      will:['would','can','do'], would:['will','could','do'],
+      can:['could','will','do'], could:['can','would','did'],
+      should:['would','could','can'], may:['might','can','could'], might:['may','could','can']
+    };
+
+    function findAux(text) {
+      const re = new RegExp('\\b(' + AUXES.join('|') + ')\\b', 'i');
+      const m = text.match(re);
+      return m ? { word: m[0], clean: m[0].toLowerCase(), index: m.index } : null;
+    }
+
+    function buildGrammarQuestion(t, pool) {
+      const aux = findAux(t.title);
+      const types = [];
+      if (aux)         types.push('aux', 'aux');
+      if (t.answer_en) types.push('match');
+      types.push('speak');
+      const type = types[Math.floor(Math.random() * types.length)];
+
+      if (type === 'aux') {
+        const before = t.title.slice(0, aux.index);
+        const after  = t.title.slice(aux.index + aux.word.length);
+        const fam    = AUX_FAM[aux.clean] || ['do','is','have'];
+        const opts   = [aux.clean];
+        fam.forEach(f => { if (opts.length < 4 && !opts.includes(f)) opts.push(f); });
+        let g = 0;
+        while (opts.length < 4 && g++ < 50) {
+          const r = AUXES[Math.floor(Math.random() * AUXES.length)];
+          if (!opts.includes(r)) opts.push(r);
+        }
+        const options = shuffle(opts);
+        return { topic: t, type, tag: '🧩 Completa el auxiliar',
+                 promptHtml: `${before}<span class="quiz-blank">_____</span>${after}`,
+                 hint: t.title_es || '', options, answer: options.indexOf(aux.clean) };
+      }
+
+      if (type === 'match') {
+        const others = shuffle(pool.filter(x => x.id !== t.id && x.title !== t.title)).slice(0, 3);
+        const options = shuffle([t.title, ...others.map(o => o.title)]);
+        return { topic: t, type, tag: '💬 ¿Qué pregunta encaja?',
+                 promptHtml: `<span style="font-size:0.95rem;color:var(--text-muted)">Alguien responde:</span><br>“${t.answer_en}”`,
+                 hint: t.answer_es || '', options, answer: options.indexOf(t.title) };
+      }
+
+      return { topic: t, type: 'speak', tag: '🎤 Dilo en voz alta',
+               promptHtml: `${t.title_es || t.title}`,
+               hint: 'Di esta pregunta en inglés', options: [], answer: -1 };
+    }
+
+    function startGrammarQuiz(weakOnly) {
+      if (!grammarData) return;
+      const questions = grammarData.filter(g => g.kind === 'question');
+      let base;
+      if (weakOnly === true) {
+        const weakIds = new Set(grammarStats().weak.map(w => w.topic.id));
+        base = questions.filter(g => weakIds.has(g.id));
+      } else {
+        base = (activeGrammarCat === 'all')
+          ? questions
+          : questions.filter(g => g.category === activeGrammarCat);
+        if (base.length < 4) base = questions;   // si la categoría no es de preguntas, usa todas
+      }
+      const msg = document.getElementById('gquiz-msg');
+      if (base.length < 4) {
+        msg.innerHTML = weakOnly === true
+          ? '<div class="no-data">Aún no tienes preguntas por reforzar. ¡Practica un poco más! 💪</div>'
+          : '<div class="no-data">No pude cargar el banco de preguntas. ¿Ya corriste el SQL de <b>preguntas</b>?</div>';
+        document.getElementById('gquiz-play').classList.add('hidden');
+        document.getElementById('gquiz-result').classList.add('hidden');
+        return;
+      }
+      msg.innerHTML = '';
+      gquizMissed = [];
+      const chosen = shuffle(base).slice(0, Math.min(GQUIZ_SIZE, base.length));
+      gquiz = chosen.map(t => buildGrammarQuestion(t, questions));
+      gquizIndex = 0; gquizScore = 0;
+      document.getElementById('gquiz-result').classList.add('hidden');
+      document.getElementById('gquiz-play').classList.remove('hidden');
+      renderGrammarQuestion();
+    }
+
+    function renderGrammarQuestion() {
+      gquizAnswered = false;
+      stopQuestionMic();
+      const q = gquiz[gquizIndex];
+      document.getElementById('gquiz-progress').textContent = `Pregunta ${gquizIndex + 1} de ${gquiz.length}`;
+      document.getElementById('gquiz-score').textContent    = gquizScore;
+      document.getElementById('gquiz-bar-fill').style.width = (gquizIndex / gquiz.length * 100) + '%';
+      document.getElementById('gquiz-type').textContent     = q.tag;
+      document.getElementById('gquiz-prompt').innerHTML     = q.promptHtml;
+      document.getElementById('gquiz-hint').textContent     = q.hint || '';
+
+      const isSpeak = q.type === 'speak';
+      document.getElementById('gquiz-options').classList.toggle('hidden', isSpeak);
+      document.getElementById('gquiz-speak').classList.toggle('hidden', !isSpeak);
+      document.getElementById('gquiz-options').innerHTML = isSpeak ? '' :
+        q.options.map((o, i) => `<button class="quiz-opt" id="gqopt-${i}" onclick="answerGrammarQuiz(${i})">${o}</button>`).join('');
+      if (isSpeak) document.getElementById('gquiz-speak-hint').textContent = 'Oprime el micrófono y di la pregunta en inglés';
+
+      const fb = document.getElementById('gquiz-feedback');
+      fb.classList.add('hidden'); fb.innerHTML = '';
+      document.getElementById('gquiz-next').classList.add('hidden');
+    }
+
+    function answerGrammarQuiz(i) {
+      if (gquizAnswered) return;
+      const q = gquiz[gquizIndex];
+      q.options.forEach((o, idx) => {
+        const btn = document.getElementById('gqopt-' + idx);
+        if (idx === q.answer)  btn.classList.add('ok');
+        else if (idx === i)    btn.classList.add('bad');
+        btn.disabled = true;
+      });
+      finishGrammarQuestion(i === q.answer);
+    }
+
+    function finishGrammarQuestion(correct, extraHtml) {
+      gquizAnswered = true;
+      const q = gquiz[gquizIndex];
+      const t = q.topic;
+      if (correct) gquizScore++;
+      else gquizMissed.push(t);
+      saveGrammarAnswer(t.id, correct);
+
+      const fb = document.getElementById('gquiz-feedback');
+      fb.className = 'quiz-feedback ' + (correct ? 'good' : 'bad');
+      fb.innerHTML = `
+        <div class="qfb-title">${correct ? '✅ ¡Correcto!' : '❌ La respuesta era:'}</div>
+        ${extraHtml || ''}
+        <div class="qfb-en">${t.title}</div>
+        <div class="qfb-es">${t.title_es || ''}</div>
+        ${t.structure ? `<div class="gram-formula" style="margin:0.5rem 0">${t.structure}</div>` : ''}
+        ${t.answer_en ? `<div class="qfb-es" style="margin-bottom:0.4rem">💬 Respuesta: “${t.answer_en}”</div>` : ''}
+        ${t.usage ? `<div class="qfb-usage">💡 ${t.usage}</div>` : ''}`;
+      fb.classList.remove('hidden');
+      document.getElementById('gquiz-score').textContent = gquizScore;
+      const next = document.getElementById('gquiz-next');
+      next.textContent = (gquizIndex === gquiz.length - 1) ? 'Ver resultado 🏁' : 'Siguiente →';
+      next.classList.remove('hidden');
+      speakEnglish(t.title);
+    }
+
+    function nextGrammarQuestion() {
+      stopQuestionMic();
+      if (gquizIndex < gquiz.length - 1) { gquizIndex++; renderGrammarQuestion(); }
+      else showGrammarQuizResult();
+    }
+
+    // ── Micrófono para el tipo "dilo en voz alta" ─────────────────
+    let qRecognition = null, qMediaRecorder = null, qChunks = [], qListening = false;
+
+    function toggleQuestionMic() { qListening ? stopQuestionMic() : startQuestionMic(); }
+
+    async function startQuestionMic() {
+      if (gquizAnswered) return;
+      const q = gquiz[gquizIndex];
+      const expected = q.topic.title;
+      const btn  = document.getElementById('gquiz-mic');
+      const hint = document.getElementById('gquiz-speak-hint');
+
+      if (useCloudSTT()) {
+        let stream;
+        try { stream = await navigator.mediaDevices.getUserMedia({ audio: true }); }
+        catch (e) { hint.textContent = 'No pude acceder al micrófono. Revisa los permisos.'; return; }
+        qChunks = [];
+        let opts = {};
+        if (window.MediaRecorder && MediaRecorder.isTypeSupported) {
+          if (MediaRecorder.isTypeSupported('audio/webm'))     opts = { mimeType: 'audio/webm' };
+          else if (MediaRecorder.isTypeSupported('audio/mp4')) opts = { mimeType: 'audio/mp4' };
+        }
+        try { qMediaRecorder = new MediaRecorder(stream, opts); }
+        catch (e) { qMediaRecorder = new MediaRecorder(stream); }
+        qMediaRecorder.ondataavailable = e => { if (e.data && e.data.size > 0) qChunks.push(e.data); };
+        qMediaRecorder.onstop = async () => {
+          stream.getTracks().forEach(t => t.stop());
+          const type = (qChunks[0] && qChunks[0].type) || 'audio/webm';
+          const blob = new Blob(qChunks, { type }); qChunks = [];
+          if (blob.size < 1200) { hint.textContent = 'No te escuché. Intenta de nuevo 🎤'; return; }
+          hint.textContent = '⏳ Transcribiendo...';
+          try {
+            const ext = type.includes('mp4') ? 'mp4' : 'webm';
+            const form = new FormData();
+            form.append('file', blob, 'audio.' + ext);
+            form.append('language', 'en');
+            const { data, error } = await sb.functions.invoke('transcribe', { body: form });
+            if (error) throw new Error(error.message);
+            const said = (data && data.text ? data.text : '').trim();
+            if (!said) { hint.textContent = 'No entendí. Intenta de nuevo 🎤'; return; }
+            gradeSpokenQuestion(expected, said);
+          } catch (e) { hint.textContent = 'Error: ' + (e.message || e); }
+        };
+        qMediaRecorder.start();
+        qListening = true; btn.classList.add('listening');
+        hint.textContent = '🔴 Grabando... oprime otra vez al terminar';
+      } else {
+        const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+        if (!SR) { hint.textContent = 'Tu navegador no soporta reconocimiento de voz.'; return; }
+        qRecognition = new SR();
+        qRecognition.lang = 'en-US'; qRecognition.interimResults = false; qRecognition.maxAlternatives = 3;
+        qRecognition.onstart  = () => { qListening = true; btn.classList.add('listening'); hint.textContent = '🔴 Escuchando...'; };
+        qRecognition.onresult = (e) => {
+          let best = e.results[0][0].transcript, bs = scorePronunciation(expected, best);
+          for (let i = 1; i < e.results[0].length; i++) {
+            const alt = e.results[0][i].transcript, s = scorePronunciation(expected, alt);
+            if (s.pct > bs.pct) { bs = s; best = alt; }
+          }
+          gradeSpokenQuestion(expected, best);
+        };
+        qRecognition.onerror = (e) => { if (e.error === 'no-speech') hint.textContent = 'No te escuché 🎤'; stopQuestionMic(); };
+        qRecognition.onend   = () => stopQuestionMic();
+        qRecognition.start();
+      }
+    }
+
+    function stopQuestionMic() {
+      qListening = false;
+      const btn = document.getElementById('gquiz-mic');
+      if (btn) btn.classList.remove('listening');
+      if (qRecognition)   { try { qRecognition.stop(); } catch (e) {} qRecognition = null; }
+      if (qMediaRecorder && qMediaRecorder.state !== 'inactive') { try { qMediaRecorder.stop(); } catch (e) {} }
+    }
+
+    function gradeSpokenQuestion(expected, said) {
+      stopQuestionMic();
+      if (gquizAnswered) return;
+      const score = scorePronunciation(expected, said);
+      const ok = score.pct >= 70;
+      document.getElementById('gquiz-speak-hint').textContent = ok ? '✅ ¡Bien dicho!' : 'Sigue practicando 💪';
+      const chips = score.wordResult.map(w =>
+        `<span class="word-chip ${w.ok ? 'word-ok' : 'word-miss'}">${w.word}</span>`).join('');
+      finishGrammarQuestion(ok, `
+        <div style="margin-bottom:0.5rem">
+          <div class="word-row">${chips}</div>
+          <div class="qfb-es">Dijiste: “${said}” · <b>${score.pct}%</b></div>
+        </div>`);
+    }
+
+    function showGrammarQuizResult() {
+      document.getElementById('gquiz-play').classList.add('hidden');
+      const pct = Math.round(gquizScore / gquiz.length * 100);
+      const cls = pct >= 80 ? 'score-circle-great' : pct >= 50 ? 'score-circle-good' : 'score-circle-try';
+      const msg = pct === 100 ? '🏆 ¡Perfecto! Ya formulas preguntas como un pro.'
+                : pct >= 80   ? '🎉 ¡Muy bien! Vas por buen camino.'
+                : pct >= 50   ? '💪 Buen intento. Repasa las que fallaste.'
+                :               '📖 Vuelve al modo Estudiar y luego inténtalo de nuevo.';
+      const missHtml = gquizMissed.length ? `
+        <div class="miss-box">
+          <div class="miss-title">📌 Para reforzar de esta ronda</div>
+          ${gquizMissed.map(t => `<div class="miss-item"><b>${t.title}</b> — ${t.title_es || ''}</div>`).join('')}
+        </div>` : '';
+      const saveNote = currentUser ? '' :
+        '<div class="quiz-res-msg" style="color:#fbbf24">💡 Inicia sesión para guardar tu progreso.</div>';
+
+      document.getElementById('gquiz-result').innerHTML = `
+        <div class="score-circle ${cls}"><span>${pct}%</span><span class="score-circle-label">ACIERTOS</span></div>
+        <div class="quiz-res-txt">${gquizScore} de ${gquiz.length} correctas</div>
+        <div class="quiz-res-msg">${msg}</div>
+        ${missHtml}${saveNote}
+        <button class="btn btn-primary" style="width:100%; justify-content:center; margin-bottom:0.6rem;" onclick="startGrammarQuiz()">🔄 Practicar de nuevo</button>
+        ${currentUser ? '<button class="btn btn-secondary" style="width:100%; justify-content:center; margin-bottom:0.6rem;" onclick="setGrammarMode(\'stats\')">📊 Ver mi progreso</button>' : ''}
+        <button class="btn btn-secondary" style="width:100%; justify-content:center;" onclick="setGrammarMode('study')">📖 Volver a estudiar</button>`;
+      document.getElementById('gquiz-result').classList.remove('hidden');
+    }
+
+    function practiceWeakGrammar() { setGrammarMode('quiz'); startGrammarQuiz(true); }
+
+    function renderGrammarStats() {
+      const box = document.getElementById('grammar-stats');
+      if (!currentUser) {
+        box.innerHTML = '<div class="no-data">🔐 Inicia sesión para guardar y ver tu progreso de preguntas.</div>';
+        return;
+      }
+      if (!grammarData) { box.innerHTML = '<div class="no-data">Cargando...</div>'; return; }
+      const s = grammarStats();
+      if (s.practiced === 0) {
+        box.innerHTML = '<div class="no-data">Todavía no has practicado preguntas.<br>Ve a <b>🎯 Practicar</b> y haz tu primer quiz.</div>';
+        return;
+      }
+      const acc = s.totalAttempts ? Math.round(s.totalCorrect / s.totalAttempts * 100) : 0;
+      const cls = acc >= 80 ? 'score-circle-great' : acc >= 50 ? 'score-circle-good' : 'score-circle-try';
+      const rowHtml = (r, kind) => `
+        <div class="lp-row ${kind}">
+          <span class="lp-word" style="flex:1.6">${r.topic.title}</span>
+          <span class="lp-tr">${r.topic.title_es || ''}</span>
+          <span class="lp-acc">${Math.round(r.acc * 100)}%</span>
+          <span class="lp-hits">${r.correct}/${r.attempts}</span>
+        </div>`;
+
+      box.innerHTML = `
+        <div class="score-circle ${cls}"><span>${acc}%</span><span class="score-circle-label">GLOBAL</span></div>
+        <div class="lp-summary">
+          <div class="lp-card"><div class="lp-num" style="color:#a855f7">${s.practiced}</div><div class="lp-label">Practicadas</div></div>
+          <div class="lp-card"><div class="lp-num" style="color:#10b981">${s.strong.length}</div><div class="lp-label">Dominadas</div></div>
+          <div class="lp-card"><div class="lp-num" style="color:#f87171">${s.weak.length}</div><div class="lp-label">Por reforzar</div></div>
+        </div>
+        ${s.weak.length ? `
+          <div class="lp-section-title">🔴 Necesitas reforzar</div>
+          ${s.weak.slice(0, 20).map(r => rowHtml(r, 'weak')).join('')}
+          ${s.weak.length >= 4 ? `<button class="btn btn-primary" style="width:100%; justify-content:center; margin-top:0.8rem;" onclick="practiceWeakGrammar()">🎯 Practicar solo estas</button>` : ''}
+        ` : '<div class="lp-section-title">🎉 Sin preguntas por reforzar</div>'}
+        ${s.strong.length ? `
+          <div class="lp-section-title">🟢 Ya las dominas</div>
+          ${s.strong.slice(0, 20).map(r => rowHtml(r, 'strong')).join('')}
+        ` : ''}
+        <button class="btn btn-secondary" style="width:100%; justify-content:center; margin-top:1.25rem;" onclick="setGrammarMode('quiz')">🎯 Hacer otro quiz</button>`;
     }
 
     // ── Verbos irregulares ────────────────────────────────────────
