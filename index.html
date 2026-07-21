@@ -770,6 +770,23 @@
     .lp-row.weak   .lp-acc { color: #f87171; }
     .lp-row.strong .lp-acc { color: #10b981; }
     .lp-hits { font-size: 0.7rem; color: var(--text-muted); white-space: nowrap; }
+
+    /* Etiqueta del tipo de pregunta (quiz de verbos) */
+    .quiz-type-tag {
+      display: inline-block; font-size: 0.65rem; font-weight: 700;
+      letter-spacing: 0.1em; text-transform: uppercase;
+      background: rgba(168,85,247,0.15); color: #c084fc;
+      border: 1px solid rgba(168,85,247,0.3);
+      padding: 0.2rem 0.6rem; border-radius: 99px; margin-bottom: 0.9rem;
+    }
+    /* Las 3 formas del verbo en el feedback */
+    .vforms { display: flex; gap: 0.45rem; flex-wrap: wrap; margin-bottom: 0.5rem; }
+    .vform {
+      background: #1a1a35; border: 1px solid var(--border); border-radius: 8px;
+      padding: 0.25rem 0.6rem; font-size: 0.82rem; font-weight: 700; color: #e2e8f0;
+    }
+    .vform small { display: block; font-size: 0.58rem; font-weight: 600; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.05em; }
+    .vform.hl { border-color: #10b981; color: #6ee7b7; }
   </style>
 </head>
 <body>
@@ -872,16 +889,50 @@
 
   <!-- ── VIEW: Irregular verbs ── -->
   <div class="study-view hidden" id="view-verbs">
-    <input class="verb-search" id="verb-search" placeholder="🔎 Buscar verbo (en inglés o español)..." oninput="renderVerbs()" />
-    <div class="verb-count" id="verb-count"></div>
-    <div class="verb-head">
-      <div style="flex:1.4; display:flex; gap:0.4rem;">
-        <span style="flex:1;">Infinitivo</span><span style="flex:1;">Pasado</span><span style="flex:1;">Participio</span>
-      </div>
-      <span style="flex:1;">Traducción</span>
-      <span style="width:32px;"></span>
+    <div class="linker-modes">
+      <button class="mode-btn active" id="vmode-study" onclick="setVerbMode('study')">📖 Estudiar</button>
+      <button class="mode-btn" id="vmode-quiz" onclick="setVerbMode('quiz')">🎯 Practicar</button>
+      <button class="mode-btn" id="vmode-stats" onclick="setVerbMode('stats')">📊 Progreso</button>
     </div>
-    <div id="verb-table"><div class="no-data">Cargando verbos...</div></div>
+
+    <!-- Modo estudiar -->
+    <div id="verb-study">
+      <input class="verb-search" id="verb-search" placeholder="🔎 Buscar verbo (en inglés o español)..." oninput="renderVerbs()" />
+      <div class="verb-count" id="verb-count"></div>
+      <div class="verb-head">
+        <div style="flex:1.4; display:flex; gap:0.4rem;">
+          <span style="flex:1;">Infinitivo</span><span style="flex:1;">Pasado</span><span style="flex:1;">Participio</span>
+        </div>
+        <span style="flex:1;">Traducción</span>
+        <span style="width:32px;"></span>
+      </div>
+      <div id="verb-table"><div class="no-data">Cargando verbos...</div></div>
+    </div>
+
+    <!-- Modo práctica (quiz) -->
+    <div id="verb-quiz" class="hidden">
+      <div id="vquiz-msg"></div>
+      <div id="vquiz-play">
+        <div class="quiz-top">
+          <span id="vquiz-progress">Pregunta 1</span>
+          <span><span class="quiz-score-val" id="vquiz-score">0</span> aciertos</span>
+        </div>
+        <div class="quiz-bar"><div class="quiz-bar-fill" id="vquiz-bar-fill" style="width:0%"></div></div>
+        <div class="quiz-card">
+          <div class="quiz-type-tag" id="vquiz-type"></div>
+          <div class="quiz-sentence" id="vquiz-prompt"></div>
+          <div class="quiz-options" id="vquiz-options"></div>
+          <div class="quiz-feedback hidden" id="vquiz-feedback"></div>
+          <button class="btn btn-primary hidden" id="vquiz-next"
+                  style="width:100%; justify-content:center; margin-top:1.25rem;"
+                  onclick="nextVerbQuestion()">Siguiente →</button>
+        </div>
+      </div>
+      <div id="vquiz-result" class="hidden"></div>
+    </div>
+
+    <!-- Modo progreso -->
+    <div id="verb-stats" class="hidden"></div>
   </div>
 
   <!-- Category filter -->
@@ -1780,6 +1831,7 @@
         return;
       }
       verbsData = data || [];
+      await loadVerbProgress();
       renderVerbs();
     }
 
@@ -1809,6 +1861,270 @@
             </button>
           </div>`;
       }).join('') || '<div class="no-data">No se encontraron verbos.</div>';
+    }
+
+    // ╔══════════════════════════════════════════════════════════╗
+    // ║  PRÁCTICA de verbos irregulares                          ║
+    // ╚══════════════════════════════════════════════════════════╝
+    const VQUIZ_SIZE = 10;
+    let vquiz = [], vquizIndex = 0, vquizScore = 0, vquizAnswered = false, vquizMissed = [];
+    let verbProgress = new Map();   // verb_id -> { attempts, correct, last_result }
+
+    function setVerbMode(mode) {
+      ['study', 'quiz', 'stats'].forEach(m =>
+        document.getElementById('vmode-' + m).classList.toggle('active', m === mode));
+      document.getElementById('verb-study').classList.toggle('hidden', mode !== 'study');
+      document.getElementById('verb-quiz').classList.toggle('hidden',  mode !== 'quiz');
+      document.getElementById('verb-stats').classList.toggle('hidden', mode !== 'stats');
+      if (mode === 'quiz')  startVerbQuiz();
+      if (mode === 'stats') renderVerbStats();
+    }
+
+    // ── Progreso ──────────────────────────────────────────────────
+    async function loadVerbProgress() {
+      verbProgress = new Map();
+      if (!currentUser) return;
+      const { data, error } = await sb.from('verb_progress').select('verb_id,attempts,correct,last_result');
+      if (error) { console.warn('verb_progress:', error.message); return; }
+      (data || []).forEach(r => verbProgress.set(r.verb_id, {
+        attempts: r.attempts, correct: r.correct, last_result: r.last_result
+      }));
+    }
+
+    async function saveVerbAnswer(verbId, wasCorrect) {
+      if (!currentUser) return;
+      const prev = verbProgress.get(verbId) || { attempts: 0, correct: 0 };
+      const row = {
+        user_id: currentUser.id, verb_id: verbId,
+        attempts: prev.attempts + 1,
+        correct:  prev.correct + (wasCorrect ? 1 : 0),
+        last_result: wasCorrect,
+        last_practiced: new Date().toISOString()
+      };
+      verbProgress.set(verbId, { attempts: row.attempts, correct: row.correct, last_result: wasCorrect });
+      const { error } = await sb.from('verb_progress').upsert(row, { onConflict: 'user_id,verb_id' });
+      if (error) console.warn('saveVerbAnswer:', error.message);
+    }
+
+    function verbStats() {
+      const rows = [];
+      (verbsData || []).forEach(v => {
+        const p = verbProgress.get(v.id);
+        if (p && p.attempts > 0) rows.push({ verb: v, ...p, acc: p.correct / p.attempts });
+      });
+      const totalAttempts = rows.reduce((a, b) => a + b.attempts, 0);
+      const totalCorrect  = rows.reduce((a, b) => a + b.correct, 0);
+      const weak   = rows.filter(r => r.acc < 0.7).sort((a, b) => a.acc - b.acc);
+      const strong = rows.filter(r => r.acc >= 0.8 && r.attempts >= 2).sort((a, b) => b.acc - a.acc);
+      return { rows, practiced: rows.length, totalAttempts, totalCorrect, weak, strong };
+    }
+
+    // ── Construcción de preguntas ─────────────────────────────────
+    function firstForm(s) { return (s || '').split('/')[0].trim(); }
+
+    // El error típico: conjugar el irregular como si fuera regular (writed, goed...)
+    function fakeRegular(base) {
+      if (/e$/i.test(base))            return base + 'd';
+      if (/[^aeiou]y$/i.test(base))    return base.slice(0, -1) + 'ied';
+      return base + 'ed';
+    }
+
+    function uniqueOptions(correct, candidates, pool, n = 4) {
+      const opts = [correct];
+      const has = s => opts.some(o => o.toLowerCase() === String(s).toLowerCase());
+      candidates.forEach(c => { if (opts.length < n && c && !has(c)) opts.push(c); });
+      let guard = 0;
+      while (opts.length < n && guard++ < 300) {
+        const r = pool[Math.floor(Math.random() * pool.length)];
+        const cand = Math.random() < 0.5 ? r.past_simple : r.past_participle;
+        if (cand && !has(cand)) opts.push(cand);
+      }
+      return shuffle(opts);
+    }
+
+    function buildVerbQuestion(v, pool) {
+      const base = v.infinitive, past = v.past_simple, part = v.past_participle;
+      const pastF = firstForm(past);
+      const canSentence = v.example_en && v.example_en.toLowerCase().includes(pastF.toLowerCase());
+      const types = canSentence ? ['sentence', 'sentence', 'past', 'participle'] : ['past', 'participle'];
+      const type  = types[Math.floor(Math.random() * types.length)];
+
+      let promptHtml, tag, correct;
+      if (type === 'sentence') {
+        const idx = v.example_en.toLowerCase().indexOf(pastF.toLowerCase());
+        const before = v.example_en.slice(0, idx);
+        const after  = v.example_en.slice(idx + pastF.length);
+        promptHtml = `${before}<span class="quiz-blank">_____</span>${after}`;
+        tag = '📝 Completa la frase';
+        correct = past;
+      } else if (type === 'past') {
+        promptHtml = `¿Cuál es el <b style="color:#a855f7">pasado</b> de <b>"${base}"</b>?`;
+        tag = '⏪ Pasado simple';
+        correct = past;
+      } else {
+        promptHtml = `¿Cuál es el <b style="color:#a855f7">participio</b> de <b>"${base}"</b>?`;
+        tag = '✅ Participio';
+        correct = part;
+      }
+      const distract = [correct === past ? part : past, fakeRegular(base), base];
+      const options  = uniqueOptions(correct, distract, pool);
+      return { verb: v, type, tag, promptHtml, options, answer: options.findIndex(o => o === correct) };
+    }
+
+    function startVerbQuiz(weakOnly) {
+      if (!verbsData) return;
+      let base;
+      if (weakOnly === true) {
+        const weakIds = new Set(verbStats().weak.map(w => w.verb.id));
+        base = verbsData.filter(v => weakIds.has(v.id));
+      } else {
+        const q = (document.getElementById('verb-search').value || '').toLowerCase().trim();
+        base = q ? verbsData.filter(v =>
+                     v.infinitive.toLowerCase().includes(q) || v.translation.toLowerCase().includes(q))
+                 : verbsData;
+      }
+      const msg = document.getElementById('vquiz-msg');
+      if (base.length < 4) {
+        msg.innerHTML = weakOnly === true
+          ? '<div class="no-data">Aún no tienes verbos por reforzar. ¡Practica un poco más primero! 💪</div>'
+          : '<div class="no-data">Muy pocos verbos para practicar. Limpia el buscador en el modo Estudiar.</div>';
+        document.getElementById('vquiz-play').classList.add('hidden');
+        document.getElementById('vquiz-result').classList.add('hidden');
+        return;
+      }
+      msg.innerHTML = '';
+      vquizMissed = [];
+      const chosen = shuffle(base).slice(0, Math.min(VQUIZ_SIZE, base.length));
+      vquiz = chosen.map(v => buildVerbQuestion(v, verbsData));
+      vquizIndex = 0; vquizScore = 0;
+      document.getElementById('vquiz-result').classList.add('hidden');
+      document.getElementById('vquiz-play').classList.remove('hidden');
+      renderVerbQuestion();
+    }
+
+    function renderVerbQuestion() {
+      vquizAnswered = false;
+      const q = vquiz[vquizIndex];
+      document.getElementById('vquiz-progress').textContent = `Pregunta ${vquizIndex + 1} de ${vquiz.length}`;
+      document.getElementById('vquiz-score').textContent    = vquizScore;
+      document.getElementById('vquiz-bar-fill').style.width = (vquizIndex / vquiz.length * 100) + '%';
+      document.getElementById('vquiz-type').textContent     = q.tag;
+      document.getElementById('vquiz-prompt').innerHTML     = q.promptHtml;
+      document.getElementById('vquiz-options').innerHTML = q.options.map((o, i) =>
+        `<button class="quiz-opt" id="vqopt-${i}" onclick="answerVerbQuiz(${i})">${o}</button>`).join('');
+      const fb = document.getElementById('vquiz-feedback');
+      fb.classList.add('hidden'); fb.innerHTML = '';
+      document.getElementById('vquiz-next').classList.add('hidden');
+    }
+
+    function answerVerbQuiz(i) {
+      if (vquizAnswered) return;
+      vquizAnswered = true;
+      const q = vquiz[vquizIndex];
+      const correct = i === q.answer;
+      if (correct) vquizScore++;
+      else vquizMissed.push(q.verb);
+      saveVerbAnswer(q.verb.id, correct);
+      q.options.forEach((o, idx) => {
+        const btn = document.getElementById('vqopt-' + idx);
+        if (idx === q.answer)  btn.classList.add('ok');
+        else if (idx === i)    btn.classList.add('bad');
+        btn.disabled = true;
+      });
+      const v  = q.verb;
+      const fb = document.getElementById('vquiz-feedback');
+      fb.className = 'quiz-feedback ' + (correct ? 'good' : 'bad');
+      fb.innerHTML = `
+        <div class="qfb-title">${correct ? '✅ ¡Correcto!' : '❌ La respuesta era: ' + q.options[q.answer]}</div>
+        <div class="vforms">
+          <span class="vform${q.type === 'past' || q.type === 'sentence' ? '' : ''}">${v.infinitive}<small>infinitivo</small></span>
+          <span class="vform${q.type !== 'participle' ? ' hl' : ''}">${v.past_simple}<small>pasado</small></span>
+          <span class="vform${q.type === 'participle' ? ' hl' : ''}">${v.past_participle}<small>participio</small></span>
+        </div>
+        <div class="qfb-es" style="margin-bottom:0.5rem">${v.translation}</div>
+        ${v.example_en ? `<div class="qfb-en">${v.example_en}</div><div class="qfb-es">${v.example_es || ''}</div>` : ''}`;
+      fb.classList.remove('hidden');
+      document.getElementById('vquiz-score').textContent = vquizScore;
+      const next = document.getElementById('vquiz-next');
+      next.textContent = (vquizIndex === vquiz.length - 1) ? 'Ver resultado 🏁' : 'Siguiente →';
+      next.classList.remove('hidden');
+      if (v.example_en) speakEnglish(v.example_en);
+      else speakEnglish(`${v.infinitive}, ${firstForm(v.past_simple)}, ${firstForm(v.past_participle)}`);
+    }
+
+    function nextVerbQuestion() {
+      if (vquizIndex < vquiz.length - 1) { vquizIndex++; renderVerbQuestion(); }
+      else showVerbQuizResult();
+    }
+
+    function showVerbQuizResult() {
+      document.getElementById('vquiz-play').classList.add('hidden');
+      const pct = Math.round(vquizScore / vquiz.length * 100);
+      const cls = pct >= 80 ? 'score-circle-great' : pct >= 50 ? 'score-circle-good' : 'score-circle-try';
+      const msg = pct === 100 ? '🏆 ¡Perfecto! Dominas estos verbos.'
+                : pct >= 80   ? '🎉 ¡Muy bien! Casi todos correctos.'
+                : pct >= 50   ? '💪 Buen intento. Repasa los que fallaste.'
+                :               '📖 Vuelve al modo Estudiar y luego inténtalo de nuevo.';
+      const missHtml = vquizMissed.length ? `
+        <div class="miss-box">
+          <div class="miss-title">📌 Para reforzar de esta ronda</div>
+          ${vquizMissed.map(v => `<div class="miss-item"><b>${v.infinitive}</b> → ${v.past_simple} → ${v.past_participle} <span style="color:var(--text-muted)">(${v.translation})</span></div>`).join('')}
+        </div>` : '';
+      const saveNote = currentUser ? '' :
+        '<div class="quiz-res-msg" style="color:#fbbf24">💡 Inicia sesión para guardar tu progreso y saber qué reforzar.</div>';
+
+      document.getElementById('vquiz-result').innerHTML = `
+        <div class="score-circle ${cls}"><span>${pct}%</span><span class="score-circle-label">ACIERTOS</span></div>
+        <div class="quiz-res-txt">${vquizScore} de ${vquiz.length} correctas</div>
+        <div class="quiz-res-msg">${msg}</div>
+        ${missHtml}${saveNote}
+        <button class="btn btn-primary" style="width:100%; justify-content:center; margin-bottom:0.6rem;" onclick="startVerbQuiz()">🔄 Practicar de nuevo</button>
+        ${currentUser ? '<button class="btn btn-secondary" style="width:100%; justify-content:center; margin-bottom:0.6rem;" onclick="setVerbMode(\'stats\')">📊 Ver mi progreso</button>' : ''}
+        <button class="btn btn-secondary" style="width:100%; justify-content:center;" onclick="setVerbMode('study')">📖 Volver a estudiar</button>`;
+      document.getElementById('vquiz-result').classList.remove('hidden');
+    }
+
+    function practiceWeakVerbs() { setVerbMode('quiz'); startVerbQuiz(true); }
+
+    function renderVerbStats() {
+      const box = document.getElementById('verb-stats');
+      if (!currentUser) {
+        box.innerHTML = '<div class="no-data">🔐 Inicia sesión para guardar y ver tu progreso de verbos.</div>';
+        return;
+      }
+      if (!verbsData) { box.innerHTML = '<div class="no-data">Cargando...</div>'; return; }
+      const s = verbStats();
+      if (s.practiced === 0) {
+        box.innerHTML = '<div class="no-data">Todavía no has practicado verbos.<br>Ve a <b>🎯 Practicar</b> y haz tu primer quiz.</div>';
+        return;
+      }
+      const acc = s.totalAttempts ? Math.round(s.totalCorrect / s.totalAttempts * 100) : 0;
+      const cls = acc >= 80 ? 'score-circle-great' : acc >= 50 ? 'score-circle-good' : 'score-circle-try';
+      const rowHtml = (r, kind) => `
+        <div class="lp-row ${kind}">
+          <span class="lp-word">${r.verb.infinitive}</span>
+          <span class="lp-tr">${r.verb.past_simple} · ${r.verb.past_participle}</span>
+          <span class="lp-acc">${Math.round(r.acc * 100)}%</span>
+          <span class="lp-hits">${r.correct}/${r.attempts}</span>
+        </div>`;
+
+      box.innerHTML = `
+        <div class="score-circle ${cls}"><span>${acc}%</span><span class="score-circle-label">GLOBAL</span></div>
+        <div class="lp-summary">
+          <div class="lp-card"><div class="lp-num" style="color:#a855f7">${s.practiced}</div><div class="lp-label">Practicados</div></div>
+          <div class="lp-card"><div class="lp-num" style="color:#10b981">${s.strong.length}</div><div class="lp-label">Dominados</div></div>
+          <div class="lp-card"><div class="lp-num" style="color:#f87171">${s.weak.length}</div><div class="lp-label">Por reforzar</div></div>
+        </div>
+        ${s.weak.length ? `
+          <div class="lp-section-title">🔴 Necesitas reforzar</div>
+          ${s.weak.slice(0, 20).map(r => rowHtml(r, 'weak')).join('')}
+          ${s.weak.length >= 4 ? `<button class="btn btn-primary" style="width:100%; justify-content:center; margin-top:0.8rem;" onclick="practiceWeakVerbs()">🎯 Practicar solo estos</button>` : ''}
+        ` : '<div class="lp-section-title">🎉 Sin verbos por reforzar</div>'}
+        ${s.strong.length ? `
+          <div class="lp-section-title">🟢 Ya los dominas</div>
+          ${s.strong.slice(0, 20).map(r => rowHtml(r, 'strong')).join('')}
+        ` : ''}
+        <button class="btn btn-secondary" style="width:100%; justify-content:center; margin-top:1.25rem;" onclick="setVerbMode('quiz')">🎯 Hacer otro quiz</button>`;
     }
 
     // ── Conectores (linking words) ─────────────────────────────────
