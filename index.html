@@ -683,6 +683,58 @@
       font-size: 0.78rem; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase;
       color: #38bdf8; margin: 1.25rem 0 0.75rem;
     }
+
+    /* ── Modo estudiar / practicar ── */
+    .linker-modes { display: flex; gap: 0.5rem; justify-content: center; margin-bottom: 1.25rem; }
+    .mode-btn {
+      background: #15152e; border: 1px solid var(--border); color: var(--text-muted);
+      padding: 0.45rem 1.1rem; border-radius: 99px; font-size: 0.85rem; font-weight: 700;
+      cursor: pointer; transition: all 0.2s;
+    }
+    .mode-btn:hover { color: var(--text); }
+    .mode-btn.active {
+      background: linear-gradient(135deg,#0ea5e9,#38bdf8); color: #fff; border-color: transparent;
+      box-shadow: 0 4px 14px rgba(56,189,248,0.35);
+    }
+
+    /* ── Quiz ── */
+    .quiz-top { display: flex; justify-content: space-between; font-size: 0.82rem; color: var(--text-muted); margin-bottom: 0.4rem; }
+    .quiz-score-val { color: #10b981; font-weight: 800; }
+    .quiz-bar { height: 6px; background: var(--border); border-radius: 99px; overflow: hidden; margin-bottom: 1.25rem; }
+    .quiz-bar-fill { height: 100%; background: linear-gradient(90deg,#0ea5e9,#38bdf8); border-radius: 99px; transition: width 0.4s ease; }
+    .quiz-card { background: #13132b; border: 1px solid var(--border); border-radius: 18px; padding: 1.5rem 1.25rem; }
+    .quiz-sentence {
+      font-size: 1.15rem; font-weight: 600; color: #f1f5f9; line-height: 1.7;
+      text-align: center; margin-bottom: 1.5rem;
+    }
+    .quiz-blank {
+      display: inline-block; min-width: 90px; border-bottom: 2px dashed #38bdf8;
+      color: #38bdf8; font-weight: 800; letter-spacing: 2px;
+    }
+    .quiz-options { display: grid; grid-template-columns: 1fr 1fr; gap: 0.6rem; }
+    @media (max-width: 480px) { .quiz-options { grid-template-columns: 1fr; } }
+    .quiz-opt {
+      background: #1a1a35; border: 1px solid var(--border); color: var(--text);
+      padding: 0.75rem 0.9rem; border-radius: 12px; font-size: 0.9rem; font-weight: 600;
+      cursor: pointer; transition: all 0.2s; text-align: center;
+    }
+    .quiz-opt:hover:not(:disabled) { border-color: #38bdf8; background: rgba(56,189,248,0.1); }
+    .quiz-opt:disabled { cursor: default; opacity: 0.85; }
+    .quiz-opt.ok  { background: rgba(16,185,129,0.2); border-color: #10b981; color: #6ee7b7; opacity: 1; }
+    .quiz-opt.bad { background: rgba(239,68,68,0.18); border-color: #ef4444; color: #fca5a5; opacity: 1; }
+
+    .quiz-feedback { margin-top: 1.25rem; border-radius: 12px; padding: 0.9rem 1rem; animation: fadeIn 0.3s ease; }
+    .quiz-feedback.good { background: rgba(16,185,129,0.1); border: 1px solid rgba(16,185,129,0.3); }
+    .quiz-feedback.bad  { background: rgba(239,68,68,0.1);  border: 1px solid rgba(239,68,68,0.3); }
+    .qfb-title { font-weight: 800; font-size: 0.95rem; margin-bottom: 0.5rem; }
+    .quiz-feedback.good .qfb-title { color: #10b981; }
+    .quiz-feedback.bad  .qfb-title { color: #f87171; }
+    .qfb-en { color: #d1fae5; font-weight: 600; font-size: 0.9rem; }
+    .qfb-es { color: var(--text-muted); font-style: italic; font-size: 0.82rem; margin-bottom: 0.5rem; }
+    .qfb-usage { color: var(--text-muted); font-size: 0.8rem; line-height: 1.5; border-top: 1px solid var(--border); padding-top: 0.5rem; }
+
+    .quiz-res-txt { text-align: center; font-size: 1.05rem; font-weight: 700; margin-bottom: 0.35rem; }
+    .quiz-res-msg { text-align: center; color: var(--text-muted); font-size: 0.88rem; margin-bottom: 1.5rem; }
   </style>
 </head>
 <body>
@@ -738,10 +790,39 @@
 
   <!-- ── VIEW: Linking words ── -->
   <div class="study-view hidden" id="view-linkers">
-    <input class="verb-search" id="linker-search" placeholder="🔎 Buscar conector (inglés o español)..." oninput="renderLinkers()" />
-    <div class="study-cats" id="linker-cats"></div>
-    <div class="verb-count" id="linker-count"></div>
-    <div id="linker-content"><div class="no-data">Cargando conectores...</div></div>
+    <div class="linker-modes">
+      <button class="mode-btn active" id="mode-study" onclick="setLinkerMode('study')">📖 Estudiar</button>
+      <button class="mode-btn" id="mode-quiz" onclick="setLinkerMode('quiz')">🎯 Practicar</button>
+    </div>
+
+    <!-- Modo estudiar -->
+    <div id="linker-study">
+      <input class="verb-search" id="linker-search" placeholder="🔎 Buscar conector (inglés o español)..." oninput="renderLinkers()" />
+      <div class="study-cats" id="linker-cats"></div>
+      <div class="verb-count" id="linker-count"></div>
+      <div id="linker-content"><div class="no-data">Cargando conectores...</div></div>
+    </div>
+
+    <!-- Modo práctica (quiz) -->
+    <div id="linker-quiz" class="hidden">
+      <div id="quiz-msg"></div>
+      <div id="quiz-play">
+        <div class="quiz-top">
+          <span id="quiz-progress">Pregunta 1</span>
+          <span><span class="quiz-score-val" id="quiz-score">0</span> aciertos</span>
+        </div>
+        <div class="quiz-bar"><div class="quiz-bar-fill" id="quiz-bar-fill" style="width:0%"></div></div>
+        <div class="quiz-card">
+          <div class="quiz-sentence" id="quiz-sentence"></div>
+          <div class="quiz-options" id="quiz-options"></div>
+          <div class="quiz-feedback hidden" id="quiz-feedback"></div>
+          <button class="btn btn-primary hidden" id="quiz-next"
+                  style="width:100%; justify-content:center; margin-top:1.25rem;"
+                  onclick="nextQuizQuestion()">Siguiente →</button>
+        </div>
+      </div>
+      <div id="quiz-result" class="hidden"></div>
+    </div>
   </div>
 
   <!-- ── VIEW: Grammar ── -->
@@ -1754,6 +1835,119 @@
           </div>`;
       });
       document.getElementById('linker-content').innerHTML = html || '<div class="no-data">No se encontraron conectores.</div>';
+    }
+
+    // ╔══════════════════════════════════════════════════════════╗
+    // ║  MODO PRÁCTICA de conectores (completa la frase)         ║
+    // ╚══════════════════════════════════════════════════════════╝
+    const QUIZ_SIZE = 10;
+    let quiz = [], quizIndex = 0, quizScore = 0, quizAnswered = false;
+
+    function setLinkerMode(mode) {
+      const study = mode === 'study';
+      document.getElementById('mode-study').classList.toggle('active', study);
+      document.getElementById('mode-quiz').classList.toggle('active', !study);
+      document.getElementById('linker-study').classList.toggle('hidden', !study);
+      document.getElementById('linker-quiz').classList.toggle('hidden', study);
+      if (!study) startQuiz();
+    }
+
+    // Ubica el conector dentro de su ejemplo para poder dejar el hueco
+    function linkerBlank(l) {
+      const term = (l.word.split('/')[0] || '').trim().replace(/\?+$/, '').trim();
+      if (!term) return null;
+      const idx = l.example_en.toLowerCase().indexOf(term.toLowerCase());
+      if (idx === -1) return null;
+      return { before: l.example_en.slice(0, idx), after: l.example_en.slice(idx + term.length) };
+    }
+
+    function startQuiz() {
+      if (!linkersData) return;
+      const pool = (activeLinkerCat === 'all' ? linkersData : linkersData.filter(l => l.category === activeLinkerCat))
+                     .filter(l => linkerBlank(l));
+      const msg = document.getElementById('quiz-msg');
+      if (pool.length < 4) {
+        msg.innerHTML = '<div class="no-data">Pocos conectores en esta categoría para practicar.<br>Elige <b>Todos</b> u otra categoría en el modo Estudiar.</div>';
+        document.getElementById('quiz-play').classList.add('hidden');
+        document.getElementById('quiz-result').classList.add('hidden');
+        return;
+      }
+      msg.innerHTML = '';
+      const chosen = shuffle(pool).slice(0, Math.min(QUIZ_SIZE, pool.length));
+      quiz = chosen.map(l => {
+        const distract = shuffle(linkersData.filter(x => x.word !== l.word)).slice(0, 3);
+        const options  = shuffle([l, ...distract]);
+        return { linker: l, blank: linkerBlank(l), options, answer: options.findIndex(o => o.word === l.word) };
+      });
+      quizIndex = 0; quizScore = 0;
+      document.getElementById('quiz-result').classList.add('hidden');
+      document.getElementById('quiz-play').classList.remove('hidden');
+      renderQuizQuestion();
+    }
+
+    function renderQuizQuestion() {
+      quizAnswered = false;
+      const q = quiz[quizIndex];
+      document.getElementById('quiz-progress').textContent = `Pregunta ${quizIndex + 1} de ${quiz.length}`;
+      document.getElementById('quiz-score').textContent    = quizScore;
+      document.getElementById('quiz-bar-fill').style.width = (quizIndex / quiz.length * 100) + '%';
+      document.getElementById('quiz-sentence').innerHTML =
+        `${q.blank.before}<span class="quiz-blank">_____</span>${q.blank.after}`;
+      document.getElementById('quiz-options').innerHTML = q.options.map((o, i) =>
+        `<button class="quiz-opt" id="qopt-${i}" onclick="answerQuiz(${i})">${o.word}</button>`).join('');
+      const fb = document.getElementById('quiz-feedback');
+      fb.classList.add('hidden'); fb.innerHTML = '';
+      document.getElementById('quiz-next').classList.add('hidden');
+    }
+
+    function answerQuiz(i) {
+      if (quizAnswered) return;
+      quizAnswered = true;
+      const q = quiz[quizIndex];
+      const correct = i === q.answer;
+      if (correct) quizScore++;
+      q.options.forEach((o, idx) => {
+        const btn = document.getElementById('qopt-' + idx);
+        if (idx === q.answer)    btn.classList.add('ok');
+        else if (idx === i)      btn.classList.add('bad');
+        btn.disabled = true;
+      });
+      const l  = q.linker;
+      const fb = document.getElementById('quiz-feedback');
+      fb.className = 'quiz-feedback ' + (correct ? 'good' : 'bad');
+      fb.innerHTML = `
+        <div class="qfb-title">${correct ? '✅ ¡Correcto!' : '❌ La respuesta era: ' + l.word}</div>
+        <div class="qfb-en">${l.example_en}</div>
+        <div class="qfb-es">${l.example_es}</div>
+        ${l.usage ? `<div class="qfb-usage">💡 ${l.usage}</div>` : ''}`;
+      fb.classList.remove('hidden');
+      document.getElementById('quiz-score').textContent = quizScore;
+      const next = document.getElementById('quiz-next');
+      next.textContent = (quizIndex === quiz.length - 1) ? 'Ver resultado 🏁' : 'Siguiente →';
+      next.classList.remove('hidden');
+      speakEnglish(l.example_en);   // escuchar la frase correcta
+    }
+
+    function nextQuizQuestion() {
+      if (quizIndex < quiz.length - 1) { quizIndex++; renderQuizQuestion(); }
+      else showQuizResult();
+    }
+
+    function showQuizResult() {
+      document.getElementById('quiz-play').classList.add('hidden');
+      const pct = Math.round(quizScore / quiz.length * 100);
+      const cls = pct >= 80 ? 'score-circle-great' : pct >= 50 ? 'score-circle-good' : 'score-circle-try';
+      const msg = pct === 100 ? '🏆 ¡Perfecto! Dominas estos conectores.'
+                : pct >= 80   ? '🎉 ¡Muy bien! Casi todos correctos.'
+                : pct >= 50   ? '💪 Buen intento. Repasa los que fallaste.'
+                :               '📖 Vuelve al modo Estudiar y luego inténtalo de nuevo.';
+      document.getElementById('quiz-result').innerHTML = `
+        <div class="score-circle ${cls}"><span>${pct}%</span><span class="score-circle-label">ACIERTOS</span></div>
+        <div class="quiz-res-txt">${quizScore} de ${quiz.length} correctas</div>
+        <div class="quiz-res-msg">${msg}</div>
+        <button class="btn btn-primary" style="width:100%; justify-content:center; margin-bottom:0.6rem;" onclick="startQuiz()">🔄 Practicar de nuevo</button>
+        <button class="btn btn-secondary" style="width:100%; justify-content:center;" onclick="setLinkerMode('study')">📖 Volver a estudiar</button>`;
+      document.getElementById('quiz-result').classList.remove('hidden');
     }
 
     function toggleAuthMode() {
