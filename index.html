@@ -807,6 +807,54 @@
       animation: pulse-red 0.6s ease-in-out infinite alternate;
     }
     .speak-hint { font-size: 0.8rem; color: var(--text-muted); text-align: center; }
+
+    /* ── Shadowing ── */
+    .shadow-bar { display: flex; align-items: center; justify-content: space-between; gap: 1rem; margin-bottom: 1rem; }
+    .shadow-select {
+      background: #15152e; border: 1px solid var(--border); color: var(--text);
+      border-radius: 10px; padding: 0.5rem 0.8rem; font-size: 0.85rem; font-weight: 600; cursor: pointer;
+    }
+    .shadow-select:focus { outline: none; border-color: var(--accent2); }
+    .shadow-progress { font-size: 0.85rem; color: var(--text-muted); font-weight: 700; white-space: nowrap; }
+
+    .shadow-steps { display: flex; align-items: center; justify-content: center; gap: 0.6rem; margin-bottom: 1.25rem; flex-wrap: wrap; }
+    .sstep {
+      font-size: 0.75rem; font-weight: 700; color: var(--text-muted);
+      background: #15152e; border: 1px solid var(--border); border-radius: 99px; padding: 0.3rem 0.8rem;
+      transition: all 0.3s;
+    }
+    .sstep.active { background: linear-gradient(135deg,#0ea5e9,#38bdf8); color: #fff; border-color: transparent; }
+    .sstep.done   { color: #10b981; border-color: rgba(16,185,129,0.4); }
+    .sstep-arrow { color: var(--text-muted); font-size: 0.8rem; }
+
+    .shadow-card {
+      background: linear-gradient(145deg, #1e1e3a, #16213e);
+      border: 1px solid var(--border); border-radius: 20px;
+      padding: 2rem 1.5rem; text-align: center;
+      box-shadow: 0 20px 60px rgba(56,189,248,0.12); margin-bottom: 1.25rem;
+    }
+    .shadow-phrase { font-size: 1.7rem; font-weight: 700; color: #f1f5f9; line-height: 1.4; }
+    .shadow-trans { font-size: 0.9rem; color: var(--text-muted); font-style: italic; margin-top: 0.5rem; min-height: 1.1rem; }
+
+    .shadow-listen { display: flex; gap: 0.6rem; justify-content: center; margin: 1.5rem 0 1rem; flex-wrap: wrap; }
+    .btn-shadow-listen {
+      background: linear-gradient(135deg,#0ea5e9,#38bdf8); color: #fff; border: none;
+      border-radius: 12px; padding: 0.7rem 1.4rem; font-size: 0.95rem; font-weight: 700; cursor: pointer;
+      display: flex; align-items: center; gap: 0.5rem; transition: all 0.2s;
+    }
+    .btn-shadow-listen:hover { box-shadow: 0 6px 20px rgba(56,189,248,0.4); }
+    .btn-shadow-listen.speaking { animation: pulse-cyan 0.8s ease-in-out infinite alternate; }
+    .btn-shadow-slow {
+      background: #1a1a35; border: 1px solid var(--border); color: var(--text-muted);
+      border-radius: 12px; padding: 0.7rem 1rem; font-size: 0.85rem; font-weight: 600; cursor: pointer; transition: all 0.2s;
+    }
+    .btn-shadow-slow:hover { color: var(--text); border-color: var(--accent2); }
+
+    .shadow-mic-zone { display: flex; flex-direction: column; align-items: center; gap: 0.6rem; margin-top: 0.5rem; }
+    .shadow-mic-hint { font-size: 0.8rem; color: var(--text-muted); }
+
+    .shadow-controls { display: flex; gap: 1rem; }
+    .shadow-controls .btn { flex: 1; justify-content: center; }
   </style>
 </head>
 <body>
@@ -858,6 +906,7 @@
     <button class="nav-tab" data-view="grammar" onclick="switchView('grammar', this)">📖 Gramática</button>
     <button class="nav-tab" data-view="verbs" onclick="switchView('verbs', this)">📝 Verbos</button>
     <button class="nav-tab" data-view="linkers" onclick="switchView('linkers', this)">🔗 Conectores</button>
+    <button class="nav-tab" data-view="shadow" onclick="switchView('shadow', this)">🗣️ Shadowing</button>
   </div>
 
   <!-- ── VIEW: Linking words ── -->
@@ -899,6 +948,52 @@
 
     <!-- Modo progreso -->
     <div id="linker-stats" class="hidden"></div>
+  </div>
+
+  <!-- ── VIEW: Shadowing ── -->
+  <div class="study-view hidden" id="view-shadow">
+    <div class="shadow-bar">
+      <select class="shadow-select" id="shadow-cat" onchange="restartShadow()"></select>
+      <span class="shadow-progress" id="shadow-progress">1 / 0</span>
+    </div>
+
+    <div class="shadow-steps">
+      <span class="sstep" id="sstep-1">1. Escucha</span>
+      <span class="sstep-arrow">→</span>
+      <span class="sstep" id="sstep-2">2. Repite</span>
+      <span class="sstep-arrow">→</span>
+      <span class="sstep" id="sstep-3">3. Compara</span>
+    </div>
+
+    <div class="shadow-card">
+      <p class="shadow-phrase" id="shadow-phrase">...</p>
+      <p class="shadow-trans" id="shadow-trans"></p>
+
+      <div class="shadow-listen">
+        <button class="btn-shadow-listen" id="shadow-play" onclick="shadowPlay(1)">
+          <svg width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M15.54 8.46a5 5 0 0 1 0 7.07"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14"/></svg>
+          Escuchar
+        </button>
+        <button class="btn-shadow-slow" onclick="shadowPlay(0.6)" title="Más lento">🐢 Lento</button>
+      </div>
+
+      <div class="shadow-mic-zone">
+        <button class="btn-mic-big" id="shadow-mic" onclick="toggleShadowMic()">
+          <svg width="28" height="28" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+            <rect x="9" y="2" width="6" height="11" rx="3"/><path d="M5 10a7 7 0 0 0 14 0"/>
+            <line x1="12" y1="19" x2="12" y2="22"/><line x1="9" y1="22" x2="15" y2="22"/>
+          </svg>
+        </button>
+        <div class="shadow-mic-hint" id="shadow-mic-hint">Escucha y luego oprime para repetir</div>
+      </div>
+
+      <div class="quiz-feedback hidden" id="shadow-feedback"></div>
+    </div>
+
+    <div class="shadow-controls">
+      <button class="btn btn-secondary" onclick="shadowRepeat()">🔁 Otra vez</button>
+      <button class="btn btn-primary" onclick="shadowNext()">Siguiente →</button>
+    </div>
   </div>
 
   <!-- ── VIEW: Grammar ── -->
@@ -1258,11 +1353,21 @@
 
     // ── Fetch all phrases once from Supabase ──────────────────────
     async function fetchAllPhrases() {
-      const { data, error } = await sb
-        .from('phrases')
-        .select('phrase_id,phrase_name,phrase_translation,description,category');
-      if (error) throw new Error(error.message);
-      return data.map(r => ({
+      // Supabase devuelve máx. 1000 filas por consulta -> paginamos para traerlas todas
+      let all = [], from = 0;
+      const PAGE = 1000;
+      while (true) {
+        const { data, error } = await sb
+          .from('phrases')
+          .select('phrase_id,phrase_name,phrase_translation,description,category')
+          .order('phrase_id')
+          .range(from, from + PAGE - 1);
+        if (error) throw new Error(error.message);
+        all = all.concat(data || []);
+        if (!data || data.length < PAGE) break;
+        from += PAGE;
+      }
+      return all.map(r => ({
         id: r.phrase_id,
         phrase: r.phrase_name,
         translation: r.phrase_translation,
@@ -1809,9 +1914,12 @@
       document.getElementById('view-grammar').classList.toggle('hidden', name !== 'grammar');
       document.getElementById('view-verbs').classList.toggle('hidden', name !== 'verbs');
       document.getElementById('view-linkers').classList.toggle('hidden', name !== 'linkers');
+      document.getElementById('view-shadow').classList.toggle('hidden', name !== 'shadow');
+      if (name !== 'shadow') stopShadowMic();
       if (name === 'grammar') loadGrammar();
       if (name === 'verbs')   loadVerbs();
       if (name === 'linkers') loadLinkers();
+      if (name === 'shadow')  loadShadow();
       window.scrollTo({ top: 0, behavior: 'smooth' });
     }
 
@@ -2651,6 +2759,186 @@
           </div>`;
       });
       document.getElementById('linker-content').innerHTML = html || '<div class="no-data">No se encontraron conectores.</div>';
+    }
+
+    // ╔══════════════════════════════════════════════════════════╗
+    // ║  SHADOWING (escuchar → repetir → comparar → repetir)     ║
+    // ╚══════════════════════════════════════════════════════════╝
+    let shadowDeck = [], shadowIndex = 0, shadowCatsBuilt = false;
+
+    function loadShadow() {
+      if (!allPhrases || allPhrases.length === 0) {
+        document.getElementById('shadow-phrase').textContent = 'No hay frases disponibles.';
+        return;
+      }
+      if (!shadowCatsBuilt) {
+        const cats = [...new Set(allPhrases.map(p => p.category).filter(Boolean))];
+        const sel = document.getElementById('shadow-cat');
+        sel.innerHTML = '<option value="all">🌐 Todas las frases</option>' +
+          cats.map(c => `<option value="${c}">${c}</option>`).join('');
+        shadowCatsBuilt = true;
+      }
+      if (shadowDeck.length === 0) restartShadow();
+    }
+
+    function restartShadow() {
+      const cat = document.getElementById('shadow-cat').value || 'all';
+      const base = (cat === 'all') ? allPhrases : allPhrases.filter(p => p.category === cat);
+      shadowDeck = shuffle(base);
+      shadowIndex = 0;
+      renderShadowCard();
+    }
+
+    function setShadowStep(step) {
+      [1, 2, 3].forEach(n => {
+        const el = document.getElementById('sstep-' + n);
+        el.classList.toggle('active', n === step);
+        el.classList.toggle('done', n < step);
+      });
+    }
+
+    function renderShadowCard() {
+      stopShadowMic();
+      const p = shadowDeck[shadowIndex];
+      if (!p) return;
+      document.getElementById('shadow-phrase').textContent = p.phrase;
+      document.getElementById('shadow-trans').textContent  = '';   // se revela al comparar
+      document.getElementById('shadow-progress').textContent = `${shadowIndex + 1} / ${shadowDeck.length}`;
+      document.getElementById('shadow-mic-hint').textContent = 'Escucha y luego oprime para repetir';
+      const fb = document.getElementById('shadow-feedback');
+      fb.classList.add('hidden'); fb.innerHTML = '';
+      setShadowStep(1);
+      // Escuchar primero (auto), como manda el shadowing
+      setTimeout(() => shadowPlay(1), 350);
+    }
+
+    function shadowPlay(rate) {
+      const p = shadowDeck[shadowIndex];
+      if (!p) return;
+      const btn = document.getElementById('shadow-play');
+      // reutiliza speakEnglish pero con rate configurable
+      if (!('speechSynthesis' in window)) return;
+      window.speechSynthesis.cancel();
+      (async () => {
+        if (!cachedEngVoice) cachedEngVoice = await getEnglishVoice();
+        const u = new SpeechSynthesisUtterance(p.phrase);
+        u.lang = 'en-US'; u.rate = rate; u.pitch = 1;
+        if (cachedEngVoice) u.voice = cachedEngVoice;
+        u.onstart = () => btn.classList.add('speaking');
+        u.onend   = () => { btn.classList.remove('speaking'); if (!document.getElementById('shadow-feedback').classList.contains('hidden')) return; setShadowStep(2); };
+        u.onerror = () => btn.classList.remove('speaking');
+        window.speechSynthesis.speak(u);
+      })();
+    }
+
+    function shadowNext() {
+      if (shadowIndex < shadowDeck.length - 1) shadowIndex++;
+      else shadowIndex = 0;   // vuelve a empezar la baraja
+      renderShadowCard();
+    }
+
+    function shadowRepeat() { renderShadowCard(); }
+
+    // ── Micrófono de shadowing (PC: Web Speech · móvil: Groq) ─────
+    let shRecog = null, shRecorder = null, shChunks = [], shListening = false;
+
+    function toggleShadowMic() { shListening ? stopShadowMic() : startShadowMic(); }
+
+    async function startShadowMic() {
+      const p = shadowDeck[shadowIndex];
+      if (!p) return;
+      const expected = p.phrase;
+      const btn  = document.getElementById('shadow-mic');
+      const hint = document.getElementById('shadow-mic-hint');
+      setShadowStep(2);
+
+      if (useCloudSTT()) {
+        let stream;
+        try { stream = await navigator.mediaDevices.getUserMedia({ audio: true }); }
+        catch (e) { hint.textContent = 'No pude acceder al micrófono. Revisa los permisos.'; return; }
+        shChunks = [];
+        let opts = {};
+        if (window.MediaRecorder && MediaRecorder.isTypeSupported) {
+          if (MediaRecorder.isTypeSupported('audio/webm'))     opts = { mimeType: 'audio/webm' };
+          else if (MediaRecorder.isTypeSupported('audio/mp4')) opts = { mimeType: 'audio/mp4' };
+        }
+        try { shRecorder = new MediaRecorder(stream, opts); }
+        catch (e) { shRecorder = new MediaRecorder(stream); }
+        shRecorder.ondataavailable = e => { if (e.data && e.data.size > 0) shChunks.push(e.data); };
+        shRecorder.onstop = async () => {
+          stream.getTracks().forEach(t => t.stop());
+          const type = (shChunks[0] && shChunks[0].type) || 'audio/webm';
+          const blob = new Blob(shChunks, { type }); shChunks = [];
+          if (blob.size < 1200) { hint.textContent = 'No te escuché. Intenta de nuevo 🎤'; return; }
+          hint.textContent = '⏳ Comparando...';
+          try {
+            const ext = type.includes('mp4') ? 'mp4' : 'webm';
+            const form = new FormData();
+            form.append('file', blob, 'audio.' + ext);
+            form.append('language', 'en');
+            const { data, error } = await sb.functions.invoke('transcribe', { body: form });
+            if (error) throw new Error(error.message);
+            const said = (data && data.text ? data.text : '').trim();
+            if (!said) { hint.textContent = 'No entendí. Intenta de nuevo 🎤'; return; }
+            gradeShadow(expected, said);
+          } catch (e) { hint.textContent = 'Error: ' + (e.message || e); }
+        };
+        shRecorder.start();
+        shListening = true; btn.classList.add('listening');
+        hint.textContent = '🔴 Grabando... oprime otra vez al terminar';
+      } else {
+        const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+        if (!SR) { hint.textContent = 'Tu navegador no soporta reconocimiento de voz.'; return; }
+        shRecog = new SR();
+        shRecog.lang = 'en-US'; shRecog.interimResults = false; shRecog.maxAlternatives = 3;
+        shRecog.onstart  = () => { shListening = true; btn.classList.add('listening'); hint.textContent = '🔴 Escuchando... repite la frase'; };
+        shRecog.onresult = (e) => {
+          let best = e.results[0][0].transcript, bs = scorePronunciation(expected, best);
+          for (let i = 1; i < e.results[0].length; i++) {
+            const alt = e.results[0][i].transcript, s = scorePronunciation(expected, alt);
+            if (s.pct > bs.pct) { bs = s; best = alt; }
+          }
+          gradeShadow(expected, best);
+        };
+        shRecog.onerror = (e) => { if (e.error === 'no-speech') hint.textContent = 'No te escuché 🎤'; stopShadowMic(); };
+        shRecog.onend   = () => stopShadowMic();
+        shRecog.start();
+      }
+    }
+
+    function stopShadowMic() {
+      shListening = false;
+      const btn = document.getElementById('shadow-mic');
+      if (btn) btn.classList.remove('listening');
+      if (shRecog)    { try { shRecog.stop(); } catch (e) {} shRecog = null; }
+      if (shRecorder && shRecorder.state !== 'inactive') { try { shRecorder.stop(); } catch (e) {} }
+    }
+
+    function gradeShadow(expected, said) {
+      stopShadowMic();
+      setShadowStep(3);
+      const p = shadowDeck[shadowIndex];
+      const score = scorePronunciation(expected, said);
+      document.getElementById('shadow-trans').textContent = p.translation || '';
+      document.getElementById('shadow-mic-hint').textContent =
+        score.pct >= 80 ? '🏆 ¡Excelente!' : score.pct >= 50 ? '💪 Bien, repite para pulir' : '🔄 Escucha de nuevo y repite';
+
+      const chips = score.wordResult.map(w =>
+        `<span class="word-chip ${w.ok ? 'word-ok' : 'word-miss'}">${w.word}</span>`).join('');
+      const badgeCls = score.pct >= 80 ? 'score-great' : score.pct >= 50 ? 'score-good' : 'score-try';
+      const fb = document.getElementById('shadow-feedback');
+      fb.className = 'quiz-feedback ' + (score.pct >= 70 ? 'good' : 'bad');
+      fb.innerHTML = `
+        <div class="pronun-header" style="margin-bottom:0.6rem">
+          <span class="pronun-title">🎤 Tu repetición</span>
+          <span class="score-badge ${badgeCls}">${score.pct}%</span>
+        </div>
+        <div class="word-row">${chips}</div>
+        <div class="pronun-you">Dijiste: <span>${said}</span></div>`;
+      fb.classList.remove('hidden');
+
+      // Cuenta para la racha diaria
+      if (p && currentUser) markPhraseStudied(p.id);
     }
 
     // ╔══════════════════════════════════════════════════════════╗
