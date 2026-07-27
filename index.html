@@ -855,6 +855,50 @@
 
     .shadow-controls { display: flex; gap: 1rem; }
     .shadow-controls .btn { flex: 1; justify-content: center; }
+
+    /* ── Dashboard "Hoy" (SRS) ── */
+    .today-hero {
+      background: linear-gradient(145deg, #1e1e3a, #16213e);
+      border: 1px solid var(--border); border-radius: 20px;
+      padding: 1.5rem; margin-bottom: 1.25rem; text-align: center;
+    }
+    .today-greet { font-size: 1.3rem; font-weight: 800; color: #f1f5f9; margin-bottom: 0.3rem; }
+    .today-sub { font-size: 0.9rem; color: var(--text-muted); }
+    .today-due-num {
+      font-size: 3rem; font-weight: 900; line-height: 1; margin: 0.75rem 0 0.25rem;
+      background: linear-gradient(135deg,#a855f7,#7c3aed);
+      -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+    }
+    .today-due-label { font-size: 0.85rem; color: var(--text-muted); }
+
+    .today-row {
+      display: flex; align-items: center; gap: 0.9rem;
+      background: #13132b; border: 1px solid var(--border); border-radius: 14px;
+      padding: 0.85rem 1.1rem; margin-bottom: 0.6rem;
+    }
+    .today-icon { font-size: 1.5rem; flex-shrink: 0; }
+    .today-info { flex: 1; min-width: 0; }
+    .today-name { font-weight: 700; color: var(--text); font-size: 0.95rem; }
+    .today-count { font-size: 0.8rem; color: var(--text-muted); }
+    .today-btn {
+      background: linear-gradient(135deg,#7c3aed,#a855f7); color: #fff; border: none;
+      border-radius: 10px; padding: 0.5rem 1.1rem; font-size: 0.85rem; font-weight: 700;
+      cursor: pointer; white-space: nowrap; transition: all 0.2s;
+    }
+    .today-btn:hover { box-shadow: 0 4px 14px rgba(124,58,237,0.45); }
+    .today-btn.done { background: #1a1a35; color: #10b981; border: 1px solid rgba(16,185,129,0.3); cursor: default; box-shadow: none; }
+
+    .today-allclear { text-align: center; padding: 1.5rem 0; }
+    .today-allclear-icon { font-size: 3.5rem; margin-bottom: 0.75rem; }
+    .today-allclear h3 { font-size: 1.2rem; font-weight: 800; margin-bottom: 0.4rem; }
+    .today-allclear p { color: var(--text-muted); font-size: 0.9rem; margin-bottom: 1.25rem; }
+
+    .today-mini {
+      display: grid; grid-template-columns: repeat(3, 1fr); gap: 0.6rem; margin-top: 1.25rem;
+    }
+    .today-mini-card { background: #13132b; border: 1px solid var(--border); border-radius: 12px; padding: 0.75rem; text-align: center; }
+    .today-mini-num { font-size: 1.3rem; font-weight: 800; }
+    .today-mini-label { font-size: 0.65rem; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.05em; margin-top: 0.15rem; }
   </style>
 </head>
 <body>
@@ -902,6 +946,7 @@
 
   <!-- Main navigation -->
   <div class="main-nav hidden" id="main-nav">
+    <button class="nav-tab" data-view="today" onclick="switchView('today', this)">📅 Hoy</button>
     <button class="nav-tab active" data-view="flashcards" onclick="switchView('flashcards', this)">🃏 Tarjetas</button>
     <button class="nav-tab" data-view="grammar" onclick="switchView('grammar', this)">📖 Gramática</button>
     <button class="nav-tab" data-view="verbs" onclick="switchView('verbs', this)">📝 Verbos</button>
@@ -948,6 +993,11 @@
 
     <!-- Modo progreso -->
     <div id="linker-stats" class="hidden"></div>
+  </div>
+
+  <!-- ── VIEW: Hoy (Dashboard SRS) ── -->
+  <div class="study-view hidden" id="view-today">
+    <div id="today-content"><div class="no-data">Cargando tu plan...</div></div>
   </div>
 
   <!-- ── VIEW: Shadowing ── -->
@@ -1350,6 +1400,149 @@
     let allPhrases = [];          // caché completa traída de Supabase
     let currentUser = null;       // usuario autenticado (o null = invitado)
     let progressMap = new Map();  // phrase_id -> { status, best_score, attempts }
+
+    // ╔══════════════════════════════════════════════════════════╗
+    // ║  SRS · Repetición espaciada                              ║
+    // ╚══════════════════════════════════════════════════════════╝
+    const SRS_LADDER = [1, 3, 7, 21, 60, 120, 240];   // días por "box"
+    let srsMap = new Map();                            // "type:id" -> { box, due, interval, reps, lapses }
+
+    const srsKey = (type, id) => type + ':' + id;
+
+    async function loadSrs() {
+      srsMap = new Map();
+      if (!currentUser) return;
+      const { data, error } = await sb.from('srs')
+        .select('item_type,item_id,box,interval_days,due_date,reps,lapses');
+      if (error) { console.warn('loadSrs:', error.message); return; }
+      (data || []).forEach(r => srsMap.set(srsKey(r.item_type, r.item_id), {
+        box: r.box, interval: r.interval_days, due: r.due_date, reps: r.reps, lapses: r.lapses
+      }));
+    }
+
+    // quality: 'again' | 'good' | 'easy'
+    async function scheduleSrs(type, id, quality) {
+      if (!currentUser || id == null) return;
+      const prev = srsMap.get(srsKey(type, id)) || { box: -1, reps: 0, lapses: 0 };
+      let box, lapses = prev.lapses;
+      if (quality === 'again') { box = 0; lapses++; }
+      else if (quality === 'easy') box = Math.min((prev.box < 0 ? 0 : prev.box) + 2, SRS_LADDER.length - 1);
+      else box = Math.min(prev.box + 1, SRS_LADDER.length - 1);   // 'good'
+      if (box < 0) box = 0;
+
+      const interval = SRS_LADDER[box];
+      const due = new Date(); due.setDate(due.getDate() + interval);
+      const dueStr = todayStr(due);
+
+      srsMap.set(srsKey(type, id), { box, interval, due: dueStr, reps: prev.reps + 1, lapses });
+      const { error } = await sb.from('srs').upsert({
+        user_id: currentUser.id, item_type: type, item_id: id,
+        box, interval_days: interval, due_date: dueStr,
+        reps: prev.reps + 1, lapses, last_reviewed: new Date().toISOString()
+      }, { onConflict: 'user_id,item_type,item_id' });
+      if (error) console.warn('scheduleSrs:', error.message);
+    }
+
+    // IDs vencidos hoy (o antes) por tipo
+    function dueIds(type) {
+      const today = todayStr();
+      const ids = [];
+      srsMap.forEach((v, k) => {
+        if (k.startsWith(type + ':') && v.due <= today) ids.push(Number(k.split(':')[1]));
+      });
+      return ids;
+    }
+
+    function openTab(name) {
+      switchView(name, document.querySelector('.nav-tab[data-view="' + name + '"]'));
+    }
+
+    // ── Dashboard "Hoy" ───────────────────────────────────────────
+    const TODAY_TYPES = [
+      { key: 'phrase',   icon: '🃏', name: 'Frases (shadowing)' },
+      { key: 'verb',     icon: '⏪', name: 'Verbos irregulares' },
+      { key: 'linker',   icon: '🔗', name: 'Conectores' },
+      { key: 'question', icon: '❓', name: 'Preguntas' },
+    ];
+
+    function renderToday() {
+      const box = document.getElementById('today-content');
+      if (!currentUser) {
+        box.innerHTML = '<div class="no-data">🔐 Inicia sesión para tener tu plan diario y activar la repetición espaciada.</div>';
+        return;
+      }
+      const counts = {};
+      let total = 0;
+      TODAY_TYPES.forEach(t => { counts[t.key] = dueIds(t.key).length; total += counts[t.key]; });
+      const { current } = computeStreaks();
+      const streakLine = `🔥 Racha: <b style="color:#fb923c">${current}</b> ${current === 1 ? 'día' : 'días'}`;
+
+      let html = '';
+      if (total > 0) {
+        html += `
+          <div class="today-hero">
+            <div class="today-greet">Tu plan de hoy</div>
+            <div class="today-sub">${streakLine}</div>
+            <div class="today-due-num">${total}</div>
+            <div class="today-due-label">repasos pendientes</div>
+          </div>`;
+        TODAY_TYPES.forEach(t => {
+          if (!counts[t.key]) return;
+          html += `
+            <div class="today-row">
+              <span class="today-icon">${t.icon}</span>
+              <div class="today-info">
+                <div class="today-name">${t.name}</div>
+                <div class="today-count">${counts[t.key]} para repasar</div>
+              </div>
+              <button class="today-btn" onclick="reviewDue('${t.key}')">Repasar</button>
+            </div>`;
+        });
+      } else {
+        html += `
+          <div class="today-hero">
+            <div class="today-sub">${streakLine}</div>
+            <div class="today-allclear">
+              <div class="today-allclear-icon">🎉</div>
+              <h3>¡Estás al día!</h3>
+              <p>No tienes repasos pendientes hoy. Aprende algo nuevo para seguir creciendo — se irá agendando solo.</p>
+              <button class="btn btn-primary" style="width:100%; justify-content:center; margin-bottom:0.6rem;" onclick="openTab('shadow')">🗣️ Practicar Shadowing</button>
+              <button class="btn btn-secondary" style="width:100%; justify-content:center;" onclick="openTab('flashcards')">🃏 Ver tarjetas</button>
+            </div>
+          </div>`;
+      }
+
+      html += `
+        <div class="today-mini">
+          <div class="today-mini-card"><div class="today-mini-num" style="color:#fb923c">${current}</div><div class="today-mini-label">Racha</div></div>
+          <div class="today-mini-card"><div class="today-mini-num" style="color:#10b981">${studiedTodayIds.size}</div><div class="today-mini-label">Hoy</div></div>
+          <div class="today-mini-card"><div class="today-mini-num" style="color:#a855f7">${srsMap.size}</div><div class="today-mini-label">En repaso</div></div>
+        </div>`;
+
+      box.innerHTML = html;
+    }
+
+    // Lanza el repaso de un tipo, filtrado a los items vencidos
+    async function reviewDue(type) {
+      const ids = new Set(dueIds(type));
+      if (ids.size === 0) return;
+      if (type === 'verb') {
+        await loadVerbs();
+        openTab('verbs'); setVerbMode('quiz');
+        startVerbQuiz(false, verbsData.filter(v => ids.has(v.id)));
+      } else if (type === 'linker') {
+        await loadLinkers();
+        openTab('linkers'); setLinkerMode('quiz');
+        startQuiz(false, linkersData.filter(l => ids.has(l.id)));
+      } else if (type === 'question') {
+        await loadGrammar();
+        openTab('grammar'); setGrammarMode('quiz');
+        startGrammarQuiz(false, grammarData.filter(g => ids.has(g.id)));
+      } else if (type === 'phrase') {
+        openTab('shadow');
+        restartShadow(allPhrases.filter(p => ids.has(p.id)));
+      }
+    }
 
     // ── Fetch all phrases once from Supabase ──────────────────────
     async function fetchAllPhrases() {
@@ -1842,9 +2035,14 @@
         if (allPhrases.length === 0) allPhrases = await fetchAllPhrases();
         await loadProgress();
         await loadStreak();
+        await loadSrs();
         document.getElementById('loading').classList.add('hidden');
         loadCategories();
         loadPhrases();
+        // Los usuarios con sesión aterrizan en su plan del día
+        if (currentUser) {
+          switchView('today', document.querySelector('[data-view="today"]'));
+        }
       } catch(e) {
         document.getElementById('loading').classList.add('hidden');
         const box = document.getElementById('error-box');
@@ -1915,11 +2113,13 @@
       document.getElementById('view-verbs').classList.toggle('hidden', name !== 'verbs');
       document.getElementById('view-linkers').classList.toggle('hidden', name !== 'linkers');
       document.getElementById('view-shadow').classList.toggle('hidden', name !== 'shadow');
+      document.getElementById('view-today').classList.toggle('hidden', name !== 'today');
       if (name !== 'shadow') stopShadowMic();
       if (name === 'grammar') loadGrammar();
       if (name === 'verbs')   loadVerbs();
       if (name === 'linkers') loadLinkers();
       if (name === 'shadow')  loadShadow();
+      if (name === 'today')   renderToday();
       window.scrollTo({ top: 0, behavior: 'smooth' });
     }
 
@@ -2129,11 +2329,13 @@
                hint: 'Di esta pregunta en inglés', options: [], answer: -1 };
     }
 
-    function startGrammarQuiz(weakOnly) {
+    function startGrammarQuiz(weakOnly, explicitPool) {
       if (!grammarData) return;
       const questions = grammarData.filter(g => g.kind === 'question');
       let base;
-      if (weakOnly === true) {
+      if (explicitPool) {
+        base = explicitPool;
+      } else if (weakOnly === true) {
         const weakIds = new Set(grammarStats().weak.map(w => w.topic.id));
         base = questions.filter(g => weakIds.has(g.id));
       } else {
@@ -2143,7 +2345,7 @@
         if (base.length < 4) base = questions;   // si la categoría no es de preguntas, usa todas
       }
       const msg = document.getElementById('gquiz-msg');
-      if (base.length < 4) {
+      if (base.length < (explicitPool ? 1 : 4)) {
         msg.innerHTML = weakOnly === true
           ? '<div class="no-data">Aún no tienes preguntas por reforzar. ¡Practica un poco más! 💪</div>'
           : '<div class="no-data">No pude cargar el banco de preguntas. ¿Ya corriste el SQL de <b>preguntas</b>?</div>';
@@ -2203,6 +2405,7 @@
       if (correct) gquizScore++;
       else gquizMissed.push(t);
       saveGrammarAnswer(t.id, correct);
+      scheduleSrs('question', t.id, correct ? 'good' : 'again');
 
       const fb = document.getElementById('gquiz-feedback');
       fb.className = 'quiz-feedback ' + (correct ? 'good' : 'bad');
@@ -2539,10 +2742,12 @@
       return { verb: v, type, tag, promptHtml, options, answer: options.findIndex(o => o === correct) };
     }
 
-    function startVerbQuiz(weakOnly) {
+    function startVerbQuiz(weakOnly, explicitPool) {
       if (!verbsData) return;
       let base;
-      if (weakOnly === true) {
+      if (explicitPool) {
+        base = explicitPool;
+      } else if (weakOnly === true) {
         const weakIds = new Set(verbStats().weak.map(w => w.verb.id));
         base = verbsData.filter(v => weakIds.has(v.id));
       } else {
@@ -2552,7 +2757,8 @@
                  : verbsData;
       }
       const msg = document.getElementById('vquiz-msg');
-      if (base.length < 4) {
+      const minNeeded = explicitPool ? 1 : 4;
+      if (base.length < minNeeded) {
         msg.innerHTML = weakOnly === true
           ? '<div class="no-data">Aún no tienes verbos por reforzar. ¡Practica un poco más primero! 💪</div>'
           : '<div class="no-data">Muy pocos verbos para practicar. Limpia el buscador en el modo Estudiar.</div>';
@@ -2593,6 +2799,7 @@
       if (correct) vquizScore++;
       else vquizMissed.push(q.verb);
       saveVerbAnswer(q.verb.id, correct);
+      scheduleSrs('verb', q.verb.id, correct ? 'good' : 'again');
       q.options.forEach((o, idx) => {
         const btn = document.getElementById('vqopt-' + idx);
         if (idx === q.answer)  btn.classList.add('ok');
@@ -2781,9 +2988,14 @@
       if (shadowDeck.length === 0) restartShadow();
     }
 
-    function restartShadow() {
-      const cat = document.getElementById('shadow-cat').value || 'all';
-      const base = (cat === 'all') ? allPhrases : allPhrases.filter(p => p.category === cat);
+    function restartShadow(explicitList) {
+      let base;
+      if (explicitList && explicitList.length) {
+        base = explicitList;
+      } else {
+        const cat = document.getElementById('shadow-cat').value || 'all';
+        base = (cat === 'all') ? allPhrases : allPhrases.filter(p => p.category === cat);
+      }
       shadowDeck = shuffle(base);
       shadowIndex = 0;
       renderShadowCard();
@@ -2938,7 +3150,10 @@
       fb.classList.remove('hidden');
 
       // Cuenta para la racha diaria
-      if (p && currentUser) markPhraseStudied(p.id);
+      if (p && currentUser) {
+        markPhraseStudied(p.id);
+        scheduleSrs('phrase', p.id, score.pct >= 95 ? 'easy' : score.pct >= 70 ? 'good' : 'again');
+      }
     }
 
     // ╔══════════════════════════════════════════════════════════╗
@@ -3010,10 +3225,12 @@
       return { before: l.example_en.slice(0, idx), after: l.example_en.slice(idx + term.length) };
     }
 
-    function startQuiz(weakOnly) {
+    function startQuiz(weakOnly, explicitPool) {
       if (!linkersData) return;
       let base;
-      if (weakOnly === true) {
+      if (explicitPool) {
+        base = explicitPool;
+      } else if (weakOnly === true) {
         const weakIds = new Set(linkerStats().weak.map(w => w.linker.id));
         base = linkersData.filter(l => weakIds.has(l.id));
       } else {
@@ -3021,7 +3238,7 @@
       }
       const pool = base.filter(l => linkerBlank(l));
       const msg = document.getElementById('quiz-msg');
-      if (pool.length < 4) {
+      if (pool.length < (explicitPool ? 1 : 4)) {
         msg.innerHTML = weakOnly === true
           ? '<div class="no-data">Aún no tienes suficientes conectores por reforzar. ¡Practica un poco más primero! 💪</div>'
           : '<div class="no-data">Pocos conectores en esta categoría para practicar.<br>Elige <b>Todos</b> u otra categoría en el modo Estudiar.</div>';
@@ -3066,6 +3283,7 @@
       if (correct) quizScore++;
       else quizMissed.push(q.linker);
       saveLinkerAnswer(q.linker.id, correct);   // guarda en tu perfil
+      scheduleSrs('linker', q.linker.id, correct ? 'good' : 'again');
       q.options.forEach((o, idx) => {
         const btn = document.getElementById('qopt-' + idx);
         if (idx === q.answer)    btn.classList.add('ok');
