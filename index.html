@@ -973,6 +973,66 @@
     .btn-mic-sm:hover { background: rgba(239,68,68,0.22); }
     .btn-mic-sm.listening { background: rgba(239,68,68,0.4); color: #fff; animation: pulse-red 0.6s ease-in-out infinite alternate; }
     .lab-phrase-fb { background: #1a1a35; border-radius: 10px; padding: 0.6rem 0.8rem; margin-bottom: 0.6rem; font-size: 0.82rem; }
+
+    /* ── Conversación IA (Chat) ── */
+    .chat-setup { display: flex; flex-wrap: wrap; gap: 0.5rem; align-items: center; margin-bottom: 1rem; }
+    .chat-select {
+      background: #15152e; border: 1px solid var(--border); color: var(--text);
+      border-radius: 10px; padding: 0.45rem 0.7rem; font-size: 0.82rem; font-weight: 600; cursor: pointer;
+    }
+    .chat-select:focus { outline: none; border-color: var(--accent2); }
+    .chat-toggle {
+      display: flex; align-items: center; gap: 0.35rem; font-size: 0.8rem; color: var(--text-muted);
+      background: #15152e; border: 1px solid var(--border); border-radius: 10px; padding: 0.4rem 0.7rem; cursor: pointer;
+    }
+    .chat-toggle.on { color: #10b981; border-color: rgba(16,185,129,0.4); }
+    .btn-chat-new {
+      background: #1a1a35; border: 1px solid var(--border); color: var(--text-muted);
+      border-radius: 10px; padding: 0.45rem 0.8rem; font-size: 0.8rem; font-weight: 600; cursor: pointer; margin-left: auto;
+    }
+    .btn-chat-new:hover { color: #f87171; border-color: rgba(239,68,68,0.3); }
+
+    .chat-window {
+      background: #0e0e1f; border: 1px solid var(--border); border-radius: 16px;
+      padding: 1rem; height: 52vh; min-height: 340px; overflow-y: auto; margin-bottom: 0.75rem;
+      display: flex; flex-direction: column; gap: 0.7rem;
+    }
+    .msg { max-width: 82%; padding: 0.65rem 0.9rem; border-radius: 16px; font-size: 0.92rem; line-height: 1.5; animation: fadeIn 0.3s ease; }
+    .msg-ai   { align-self: flex-start; background: #1e1e3a; border: 1px solid var(--border); border-bottom-left-radius: 5px; color: #f1f5f9; }
+    .msg-user { align-self: flex-end; background: linear-gradient(135deg,#7c3aed,#a855f7); color: #fff; border-bottom-right-radius: 5px; }
+    .msg-ai .msg-correct {
+      display: block; background: rgba(251,191,36,0.12); border: 1px solid rgba(251,191,36,0.3); color: #fde68a;
+      border-radius: 8px; padding: 0.35rem 0.55rem; margin-bottom: 0.45rem; font-size: 0.82rem;
+    }
+    .msg-ai-row { display: flex; align-items: flex-end; gap: 0.4rem; align-self: flex-start; max-width: 90%; }
+    .msg-ai-row .msg { max-width: 100%; }
+    .msg-speak {
+      background: rgba(34,211,238,0.12); color: #22d3ee; border: 1px solid rgba(34,211,238,0.3);
+      border-radius: 8px; width: 28px; height: 28px; flex-shrink: 0; cursor: pointer;
+      display: flex; align-items: center; justify-content: center; font-size: 0.7rem;
+    }
+    .msg-speak.speaking { animation: pulse-cyan 0.8s ease-in-out infinite alternate; }
+    .chat-typing { align-self: flex-start; color: var(--text-muted); font-size: 0.85rem; font-style: italic; }
+
+    .chat-input-row { display: flex; gap: 0.5rem; align-items: flex-end; }
+    .chat-input {
+      flex: 1; background: #1a1a35; border: 1px solid var(--border); color: var(--text);
+      border-radius: 12px; padding: 0.7rem 0.9rem; font-size: 0.92rem; resize: none; font-family: inherit; line-height: 1.4;
+      max-height: 120px;
+    }
+    .chat-input:focus { outline: none; border-color: var(--accent2); }
+    .chat-input::placeholder { color: #5a5a7a; }
+    .chat-send, .chat-mic {
+      border-radius: 12px; width: 46px; height: 46px; flex-shrink: 0; cursor: pointer; border: none;
+      display: flex; align-items: center; justify-content: center; transition: all 0.2s;
+    }
+    .chat-send { background: linear-gradient(135deg,#7c3aed,#a855f7); color: #fff; }
+    .chat-send:hover { box-shadow: 0 4px 14px rgba(124,58,237,0.45); }
+    .chat-send:disabled { opacity: 0.5; cursor: not-allowed; }
+    .chat-mic { background: rgba(239,68,68,0.12); color: #f87171; border: 1px solid rgba(239,68,68,0.3); }
+    .chat-mic:hover { background: rgba(239,68,68,0.22); }
+    .chat-mic.listening { background: rgba(239,68,68,0.4); color: #fff; animation: pulse-red 0.6s ease-in-out infinite alternate; }
+    .chat-hint { font-size: 0.72rem; color: var(--text-muted); text-align: center; margin-top: 0.4rem; }
   </style>
 </head>
 <body>
@@ -1027,6 +1087,7 @@
     <button class="nav-tab" data-view="linkers" onclick="switchView('linkers', this)">🔗 Conectores</button>
     <button class="nav-tab" data-view="shadow" onclick="switchView('shadow', this)">🗣️ Shadowing</button>
     <button class="nav-tab" data-view="lab" onclick="switchView('lab', this)">🔬 Sonidos</button>
+    <button class="nav-tab" data-view="chat" onclick="switchView('chat', this)">💬 Conversar</button>
   </div>
 
   <!-- ── VIEW: Linking words ── -->
@@ -1073,6 +1134,42 @@
   <!-- ── VIEW: Hoy (Dashboard SRS) ── -->
   <div class="study-view hidden" id="view-today">
     <div id="today-content"><div class="no-data">Cargando tu plan...</div></div>
+  </div>
+
+  <!-- ── VIEW: Conversación IA ── -->
+  <div class="study-view hidden" id="view-chat">
+    <div class="chat-setup">
+      <select class="chat-select" id="chat-scenario" onchange="newChat()">
+        <option value="free">💬 Charla libre</option>
+        <option value="smalltalk">👋 Conocer a alguien</option>
+        <option value="interview">💼 Entrevista de trabajo</option>
+        <option value="restaurant">🍽️ En un restaurante</option>
+        <option value="travel">✈️ Viajando</option>
+      </select>
+      <select class="chat-select" id="chat-level" onchange="newChat()">
+        <option value="beginner">🟢 Básico</option>
+        <option value="intermediate" selected>🟡 Intermedio</option>
+        <option value="advanced">🔴 Avanzado</option>
+      </select>
+      <div class="chat-toggle on" id="chat-correct-toggle" onclick="toggleChatCorrect()">✏️ Corrige</div>
+      <button class="btn-chat-new" onclick="newChat()">🔄 Nueva</button>
+    </div>
+
+    <div class="chat-window" id="chat-window"></div>
+
+    <div class="chat-input-row">
+      <textarea class="chat-input" id="chat-input" rows="1" placeholder="Escribe en inglés..." oninput="autoGrowChat(this)" onkeydown="chatKey(event)"></textarea>
+      <button class="chat-mic" id="chat-mic" onclick="toggleChatMic()" title="Hablar">
+        <svg width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+          <rect x="9" y="2" width="6" height="11" rx="3"/><path d="M5 10a7 7 0 0 0 14 0"/>
+          <line x1="12" y1="19" x2="12" y2="22"/><line x1="9" y1="22" x2="15" y2="22"/>
+        </svg>
+      </button>
+      <button class="chat-send" id="chat-send" onclick="sendChat()" title="Enviar">
+        <svg width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
+      </button>
+    </div>
+    <div class="chat-hint">✍️ Escribe o 🎤 habla · Enter para enviar · toca 🔊 en las respuestas para oírlas</div>
   </div>
 
   <!-- ── VIEW: Laboratorio de Pronunciación ── -->
@@ -1842,6 +1939,197 @@
         <div style="color:var(--text-muted); font-size:0.78rem">Dijiste: “${said}”</div>`;
     }
 
+    // ╔══════════════════════════════════════════════════════════╗
+    // ║  CONVERSACIÓN IA (chat con Groq/Llama)                   ║
+    // ╚══════════════════════════════════════════════════════════╝
+    let chatHistory = [];       // [{role:'user'|'assistant', content}]
+    let chatCorrect = true;
+    let chatBusy = false;
+    let chatStarted = false;
+
+    const CHAT_OPENERS = {
+      free:       "Hi! 😊 I'm here to chat with you in English. What would you like to talk about today?",
+      smalltalk:  "Hey, nice to meet you! So, how's your day going so far?",
+      interview:  "Good morning, thanks for coming in today. To start, could you tell me a little about yourself?",
+      restaurant: "Good evening, welcome! Here's the menu. Can I get you something to drink first?",
+      travel:     "Hello! Welcome. Do you have your passport and ticket ready?",
+    };
+    const CHAT_SCENARIO_ROLE = {
+      free:       "Just have a friendly, natural conversation about any topic the learner brings up.",
+      smalltalk:  "You are making small talk, like meeting someone new at an event. Ask about their life, work, hobbies.",
+      interview:  "You are a friendly job interviewer. Ask typical interview questions one at a time and react to the answers.",
+      restaurant: "You are a waiter at a restaurant. Help the learner order food and drinks.",
+      travel:     "You are an airport/hotel staff member helping a traveler.",
+    };
+    const CHAT_LEVEL = {
+      beginner:     "Use very simple English (level A1-A2): short sentences and common words.",
+      intermediate: "Use clear, natural English (level B1). Keep it simple but real.",
+      advanced:     "Use natural, native-level English (B2-C1).",
+    };
+
+    function buildChatSystem() {
+      const scen  = document.getElementById('chat-scenario').value;
+      const level = document.getElementById('chat-level').value;
+      let sys = "You are a warm, encouraging English conversation partner for a Spanish-speaking learner. "
+        + CHAT_SCENARIO_ROLE[scen] + " " + CHAT_LEVEL[level] + " "
+        + "Keep every reply SHORT (1-3 sentences) and ALWAYS finish with a question to keep the conversation going. "
+        + "Reply in English. Be natural and friendly.";
+      if (chatCorrect) {
+        sys += " If the learner's last message has an English mistake, begin your reply with one short correction line in this exact format: "
+          + "'[CORRECT] <the corrected version>' on its own line, then continue the conversation normally. "
+          + "If there is no mistake, do not add the correction line.";
+      }
+      return sys;
+    }
+
+    function loadChat() {
+      if (!chatStarted) newChat();
+    }
+
+    function newChat() {
+      chatStarted = true;
+      chatHistory = [];
+      stopChatMic();
+      const opener = CHAT_OPENERS[document.getElementById('chat-scenario').value] || CHAT_OPENERS.free;
+      chatHistory.push({ role: 'assistant', content: opener });
+      renderChat();
+      document.getElementById('chat-input').value = '';
+    }
+
+    function toggleChatCorrect() {
+      chatCorrect = !chatCorrect;
+      document.getElementById('chat-correct-toggle').classList.toggle('on', chatCorrect);
+    }
+
+    function renderChat(typing) {
+      const win = document.getElementById('chat-window');
+      const spk = t => (t || '').replace(/'/g, "\\'").replace(/"/g, '&quot;');
+      let html = chatHistory.map(m => {
+        if (m.role === 'user') return `<div class="msg msg-user">${escapeHtml(m.content)}</div>`;
+        // assistant: separar corrección si viene
+        let corr = '', text = m.content;
+        const cm = text.match(/\[CORRECT\]\s*(.+)/i);
+        if (cm) { corr = cm[1].trim(); text = text.replace(/\[CORRECT\]\s*.+/i, '').trim(); }
+        const correctHtml = corr ? `<span class="msg-correct">✏️ Mejor: ${escapeHtml(corr)}</span>` : '';
+        return `<div class="msg-ai-row">
+                  <div class="msg msg-ai">${correctHtml}${escapeHtml(text)}</div>
+                  <button class="msg-speak" onclick="speakEnglish('${spk(text)}', this)">🔊</button>
+                </div>`;
+      }).join('');
+      if (typing) html += `<div class="chat-typing" id="chat-typing">escribiendo…</div>`;
+      win.innerHTML = html;
+      win.scrollTop = win.scrollHeight;
+    }
+
+    function escapeHtml(s) {
+      return (s || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+    }
+
+    function autoGrowChat(el) {
+      el.style.height = 'auto';
+      el.style.height = Math.min(el.scrollHeight, 120) + 'px';
+    }
+
+    function chatKey(e) {
+      if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendChat(); }
+    }
+
+    async function sendChat() {
+      if (chatBusy) return;
+      const input = document.getElementById('chat-input');
+      const text = input.value.trim();
+      if (!text) return;
+      input.value = ''; autoGrowChat(input);
+      chatHistory.push({ role: 'user', content: text });
+      renderChat(true);
+      chatBusy = true;
+      document.getElementById('chat-send').disabled = true;
+
+      try {
+        const messages = [{ role: 'system', content: buildChatSystem() }].concat(chatHistory);
+        const { data, error } = await sb.functions.invoke('chat', { body: { messages } });
+        if (error) throw new Error(error.message || 'Error en el chat');
+        const reply = (data && data.reply ? data.reply : '').trim();
+        if (!reply) throw new Error('Respuesta vacía del modelo');
+        chatHistory.push({ role: 'assistant', content: reply });
+        renderChat();
+        // Leer la respuesta en voz alta (sin la línea de corrección)
+        const spoken = reply.replace(/\[CORRECT\]\s*.+/i, '').trim();
+        speakEnglish(spoken);
+      } catch (e) {
+        chatHistory.push({ role: 'assistant', content: '⚠️ ' + (e.message || e) + ' (¿ya desplegaste la función "chat"?)' });
+        renderChat();
+      } finally {
+        chatBusy = false;
+        document.getElementById('chat-send').disabled = false;
+      }
+    }
+
+    // ── Micrófono del chat (dicta al input) ───────────────────────
+    let chatRecog = null, chatRecorder = null, chatChunks = [], chatListening = false;
+
+    function toggleChatMic() { chatListening ? stopChatMic() : startChatMic(); }
+
+    async function startChatMic() {
+      const btn = document.getElementById('chat-mic');
+      const input = document.getElementById('chat-input');
+      if (useCloudSTT()) {
+        let stream;
+        try { stream = await navigator.mediaDevices.getUserMedia({ audio: true }); }
+        catch (e) { input.placeholder = 'No pude acceder al micrófono.'; return; }
+        chatChunks = [];
+        let opts = {};
+        if (window.MediaRecorder && MediaRecorder.isTypeSupported) {
+          if (MediaRecorder.isTypeSupported('audio/webm'))     opts = { mimeType: 'audio/webm' };
+          else if (MediaRecorder.isTypeSupported('audio/mp4')) opts = { mimeType: 'audio/mp4' };
+        }
+        try { chatRecorder = new MediaRecorder(stream, opts); }
+        catch (e) { chatRecorder = new MediaRecorder(stream); }
+        chatRecorder.ondataavailable = e => { if (e.data && e.data.size > 0) chatChunks.push(e.data); };
+        chatRecorder.onstop = async () => {
+          stream.getTracks().forEach(t => t.stop());
+          const type = (chatChunks[0] && chatChunks[0].type) || 'audio/webm';
+          const blob = new Blob(chatChunks, { type }); chatChunks = [];
+          if (blob.size < 1200) return;
+          input.placeholder = '⏳ Transcribiendo...';
+          try {
+            const ext = type.includes('mp4') ? 'mp4' : 'webm';
+            const form = new FormData();
+            form.append('file', blob, 'audio.' + ext);
+            form.append('language', 'en');
+            const { data, error } = await sb.functions.invoke('transcribe', { body: form });
+            if (error) throw new Error(error.message);
+            const said = (data && data.text ? data.text : '').trim();
+            input.placeholder = 'Escribe en inglés...';
+            if (said) { input.value = (input.value ? input.value + ' ' : '') + said; autoGrowChat(input); input.focus(); }
+          } catch (e) { input.placeholder = 'Error al transcribir'; }
+        };
+        chatRecorder.start();
+        chatListening = true; btn.classList.add('listening');
+      } else {
+        const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+        if (!SR) { input.placeholder = 'Tu navegador no soporta voz. Escribe.'; return; }
+        chatRecog = new SR();
+        chatRecog.lang = 'en-US'; chatRecog.interimResults = false; chatRecog.maxAlternatives = 1;
+        chatRecog.onstart  = () => { chatListening = true; btn.classList.add('listening'); };
+        chatRecog.onresult = (e) => {
+          const said = e.results[0][0].transcript.trim();
+          if (said) { input.value = (input.value ? input.value + ' ' : '') + said; autoGrowChat(input); input.focus(); }
+        };
+        chatRecog.onerror = () => stopChatMic();
+        chatRecog.onend   = () => stopChatMic();
+        chatRecog.start();
+      }
+    }
+
+    function stopChatMic() {
+      chatListening = false;
+      const btn = document.getElementById('chat-mic');
+      if (btn) btn.classList.remove('listening');
+      if (chatRecog)    { try { chatRecog.stop(); } catch (e) {} chatRecog = null; }
+      if (chatRecorder && chatRecorder.state !== 'inactive') { try { chatRecorder.stop(); } catch (e) {} }
+    }
+
     // ── Fetch all phrases once from Supabase ──────────────────────
     async function fetchAllPhrases() {
       // Supabase devuelve máx. 1000 filas por consulta -> paginamos para traerlas todas
@@ -2413,14 +2701,17 @@
       document.getElementById('view-shadow').classList.toggle('hidden', name !== 'shadow');
       document.getElementById('view-today').classList.toggle('hidden', name !== 'today');
       document.getElementById('view-lab').classList.toggle('hidden', name !== 'lab');
+      document.getElementById('view-chat').classList.toggle('hidden', name !== 'chat');
       if (name !== 'shadow') stopShadowMic();
       if (name !== 'lab')    stopLabMic();
+      if (name !== 'chat')   stopChatMic();
       if (name === 'grammar') loadGrammar();
       if (name === 'verbs')   loadVerbs();
       if (name === 'linkers') loadLinkers();
       if (name === 'shadow')  loadShadow();
       if (name === 'today')   renderToday();
       if (name === 'lab')     loadLab();
+      if (name === 'chat')    loadChat();
       window.scrollTo({ top: 0, behavior: 'smooth' });
     }
 
