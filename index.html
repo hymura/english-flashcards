@@ -899,6 +899,80 @@
     .today-mini-card { background: #13132b; border: 1px solid var(--border); border-radius: 12px; padding: 0.75rem; text-align: center; }
     .today-mini-num { font-size: 1.3rem; font-weight: 800; }
     .today-mini-label { font-size: 0.65rem; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.05em; margin-top: 0.15rem; }
+
+    /* ── Laboratorio de Pronunciación ── */
+    .lab-cat-title {
+      font-size: 0.78rem; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase;
+      color: #22d3ee; margin: 1.25rem 0 0.75rem;
+    }
+    .lab-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(96px, 1fr)); gap: 0.6rem; }
+    .lab-chip {
+      background: #13132b; border: 1px solid var(--border); border-radius: 14px;
+      padding: 0.9rem 0.5rem; cursor: pointer; transition: all 0.2s;
+      display: flex; flex-direction: column; align-items: center; gap: 0.3rem;
+    }
+    .lab-chip:hover { border-color: #22d3ee; transform: translateY(-2px); box-shadow: 0 6px 18px rgba(34,211,238,0.2); }
+    .lab-sym { font-size: 1.4rem; font-weight: 800; color: #22d3ee; font-family: 'Cambria', Georgia, serif; }
+    .lab-name { font-size: 0.68rem; color: var(--text-muted); text-align: center; }
+
+    .lab-back {
+      background: none; border: none; color: #22d3ee; font-weight: 700; font-size: 0.9rem;
+      cursor: pointer; padding: 0.3rem 0; margin-bottom: 0.5rem;
+    }
+    .lab-detail { background: #13132b; border: 1px solid var(--border); border-radius: 18px; padding: 1.25rem; }
+    .lab-detail-head { display: flex; align-items: center; gap: 1rem; margin-bottom: 1rem; }
+    .lab-big-sym {
+      font-size: 2.4rem; font-weight: 800; color: #22d3ee; font-family: 'Cambria', Georgia, serif;
+      background: rgba(34,211,238,0.1); border: 1px solid rgba(34,211,238,0.3);
+      border-radius: 14px; width: 72px; height: 72px; display: flex; align-items: center; justify-content: center; flex-shrink: 0;
+    }
+    .lab-detail-name { font-size: 1.2rem; font-weight: 800; color: #f1f5f9; }
+    .lab-detail-asin { font-size: 0.88rem; color: var(--text-muted); }
+
+    .lab-accents { display: flex; gap: 0.5rem; margin-bottom: 1.1rem; flex-wrap: wrap; align-items: center; }
+    .lab-accent {
+      background: #1a1a35; border: 1px solid var(--border); color: var(--text-muted);
+      border-radius: 99px; padding: 0.4rem 0.9rem; font-size: 0.82rem; font-weight: 700; cursor: pointer; transition: all 0.2s;
+    }
+    .lab-accent.active { background: rgba(34,211,238,0.15); color: #22d3ee; border-color: rgba(34,211,238,0.4); }
+
+    .lab-sec { margin-bottom: 1.1rem; }
+    .lab-sec-t { font-size: 0.72rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: var(--text-muted); margin-bottom: 0.5rem; }
+    .lab-sec p { font-size: 0.9rem; color: var(--text); line-height: 1.55; }
+
+    .lab-words { display: flex; flex-wrap: wrap; gap: 0.45rem; }
+    .lab-word {
+      background: rgba(34,211,238,0.1); border: 1px solid rgba(34,211,238,0.3); color: #a5f3fc;
+      border-radius: 10px; padding: 0.4rem 0.7rem; font-size: 0.85rem; font-weight: 600; cursor: pointer; transition: all 0.2s;
+    }
+    .lab-word:hover { background: rgba(34,211,238,0.2); }
+    .lab-word.speaking { animation: pulse-cyan 0.8s ease-in-out infinite alternate; }
+
+    .lab-pair { display: flex; align-items: center; gap: 0.6rem; margin-bottom: 0.4rem; }
+    .lab-pair-w {
+      flex: 1; background: #1a1a35; border: 1px solid var(--border); color: var(--text);
+      border-radius: 10px; padding: 0.5rem; font-size: 0.9rem; font-weight: 700; cursor: pointer; transition: all 0.2s;
+    }
+    .lab-pair-w:hover { border-color: #22d3ee; }
+    .lab-pair-w.speaking { animation: pulse-cyan 0.8s ease-in-out infinite alternate; }
+    .lab-pair-vs { color: var(--text-muted); font-size: 0.85rem; }
+
+    .lab-phrase-row { display: flex; align-items: center; gap: 0.6rem; margin-bottom: 0.4rem; }
+    .lab-audio {
+      background: rgba(34,211,238,0.1); color: #22d3ee; border: 1px solid rgba(34,211,238,0.3);
+      border-radius: 8px; width: 32px; height: 32px; flex-shrink: 0; cursor: pointer; font-size: 0.8rem;
+      display: flex; align-items: center; justify-content: center;
+    }
+    .lab-audio.speaking { animation: pulse-cyan 0.8s ease-in-out infinite alternate; }
+    .lab-phrase-txt { flex: 1; font-size: 0.92rem; color: #d1fae5; font-weight: 600; }
+    .btn-mic-sm {
+      background: rgba(239,68,68,0.12); color: #f87171; border: 1px solid rgba(239,68,68,0.3);
+      border-radius: 8px; width: 34px; height: 34px; flex-shrink: 0; cursor: pointer; font-size: 0.85rem;
+      display: flex; align-items: center; justify-content: center; transition: all 0.2s;
+    }
+    .btn-mic-sm:hover { background: rgba(239,68,68,0.22); }
+    .btn-mic-sm.listening { background: rgba(239,68,68,0.4); color: #fff; animation: pulse-red 0.6s ease-in-out infinite alternate; }
+    .lab-phrase-fb { background: #1a1a35; border-radius: 10px; padding: 0.6rem 0.8rem; margin-bottom: 0.6rem; font-size: 0.82rem; }
   </style>
 </head>
 <body>
@@ -952,6 +1026,7 @@
     <button class="nav-tab" data-view="verbs" onclick="switchView('verbs', this)">📝 Verbos</button>
     <button class="nav-tab" data-view="linkers" onclick="switchView('linkers', this)">🔗 Conectores</button>
     <button class="nav-tab" data-view="shadow" onclick="switchView('shadow', this)">🗣️ Shadowing</button>
+    <button class="nav-tab" data-view="lab" onclick="switchView('lab', this)">🔬 Sonidos</button>
   </div>
 
   <!-- ── VIEW: Linking words ── -->
@@ -998,6 +1073,11 @@
   <!-- ── VIEW: Hoy (Dashboard SRS) ── -->
   <div class="study-view hidden" id="view-today">
     <div id="today-content"><div class="no-data">Cargando tu plan...</div></div>
+  </div>
+
+  <!-- ── VIEW: Laboratorio de Pronunciación ── -->
+  <div class="study-view hidden" id="view-lab">
+    <div id="lab-content"><div class="no-data">Cargando sonidos...</div></div>
   </div>
 
   <!-- ── VIEW: Shadowing ── -->
@@ -1542,6 +1622,224 @@
         openTab('shadow');
         restartShadow(allPhrases.filter(p => ids.has(p.id)));
       }
+    }
+
+    // ╔══════════════════════════════════════════════════════════╗
+    // ║  LABORATORIO DE PRONUNCIACIÓN                            ║
+    // ╚══════════════════════════════════════════════════════════╝
+    let phonemesData = null, currentSound = null, labLang = 'en-US';
+    const voiceByLang = {};
+
+    async function getVoiceFor(lang) {
+      if (voiceByLang[lang] !== undefined) return voiceByLang[lang];
+      const voices = await new Promise(res => {
+        if (window.speechSynthesis.getVoices().length) res(window.speechSynthesis.getVoices());
+        else window.speechSynthesis.onvoiceschanged = () => res(window.speechSynthesis.getVoices());
+      });
+      const two = lang.slice(0, 2);
+      const pick = voices.find(v => v.lang === lang && v.localService)
+                || voices.find(v => v.lang === lang)
+                || voices.find(v => v.lang.replace('_', '-') === lang)
+                || voices.find(v => v.lang.startsWith(two));
+      voiceByLang[lang] = pick || null;
+      return voiceByLang[lang];
+    }
+
+    async function speakLang(text, lang, btn) {
+      if (!('speechSynthesis' in window) || !text) return;
+      window.speechSynthesis.cancel();
+      const v = await getVoiceFor(lang);
+      const u = new SpeechSynthesisUtterance(text);
+      u.lang = lang; u.rate = 0.9; u.pitch = 1;
+      if (v) u.voice = v;
+      if (btn) {
+        u.onstart = () => btn.classList.add('speaking');
+        u.onend   = () => btn.classList.remove('speaking');
+        u.onerror = () => btn.classList.remove('speaking');
+      }
+      window.speechSynthesis.speak(u);
+    }
+    function labSpeak(text, btn) { speakLang(text, labLang, btn); }
+
+    function setLabLang(lang, el) {
+      labLang = lang;
+      document.querySelectorAll('.lab-accent').forEach(b => b.classList.remove('active'));
+      if (el) el.classList.add('active');
+    }
+
+    async function loadLab() {
+      if (phonemesData) { if (!currentSound) renderLabGrid(); return; }
+      const { data, error } = await sb.from('phonemes').select('*').order('sort_order');
+      if (error) {
+        document.getElementById('lab-content').innerHTML =
+          '<div class="no-data">No pude cargar los sonidos. ¿Ya corriste el SQL de <b>phonemes</b>?<br><span style="font-size:0.75rem">' + error.message + '</span></div>';
+        return;
+      }
+      phonemesData = data || [];
+      renderLabGrid();
+    }
+
+    function renderLabGrid() {
+      currentSound = null;
+      stopLabMic();
+      const cats = [...new Set(phonemesData.map(p => p.category))];
+      let html = '<p class="today-sub" style="text-align:center; margin-bottom:1rem">Elige un sonido para escucharlo, ver la posición de la boca y practicarlo 🔬</p>';
+      cats.forEach(c => {
+        html += `<div class="lab-cat-title">${c}</div><div class="lab-grid">`;
+        phonemesData.filter(p => p.category === c).forEach(p => {
+          html += `<button class="lab-chip" onclick="openSound(${p.id})">
+                     <span class="lab-sym">${p.symbol}</span>
+                     <span class="lab-name">${p.name}</span>
+                   </button>`;
+        });
+        html += `</div>`;
+      });
+      document.getElementById('lab-content').innerHTML = html;
+    }
+
+    function openSound(id) {
+      stopLabMic();
+      const p = phonemesData.find(x => x.id === id);
+      if (!p) return;
+      currentSound = p;
+      const spk = t => (t || '').replace(/'/g, "\\'").replace(/"/g, '&quot;');
+      const ear = `<svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M15.54 8.46a5 5 0 0 1 0 7.07"/></svg>`;
+
+      const wordChips = (p.words || []).map(w =>
+        `<button class="lab-word" onclick="labSpeak('${spk(w)}', this)">${w}</button>`).join('');
+
+      const pairRows = (p.pairs || []).map(pr => {
+        const parts = pr.split('/').map(s => s.trim());
+        return `<div class="lab-pair">
+                  <button class="lab-pair-w" onclick="labSpeak('${spk(parts[0])}', this)">${parts[0]} 🔊</button>
+                  <span class="lab-pair-vs">vs</span>
+                  <button class="lab-pair-w" onclick="labSpeak('${spk(parts[1] || '')}', this)">${parts[1] || ''} 🔊</button>
+                </div>`;
+      }).join('');
+
+      const phraseRows = (p.phrases || []).map((ph, i) => `
+        <div class="lab-phrase-row">
+          <button class="lab-audio" onclick="labSpeak('${spk(ph)}', this)">🔊</button>
+          <span class="lab-phrase-txt">${ph}</span>
+          <button class="btn-mic-sm" id="lab-mic-${i}" onclick="labPhraseMic(${i})" title="Grábate">🎤</button>
+        </div>
+        <div class="lab-phrase-fb hidden" id="lab-fb-${i}"></div>`).join('');
+
+      document.getElementById('lab-content').innerHTML = `
+        <button class="lab-back" onclick="renderLabGrid()">← Todos los sonidos</button>
+        <div class="lab-detail">
+          <div class="lab-detail-head">
+            <div class="lab-big-sym">${p.symbol}</div>
+            <div>
+              <div class="lab-detail-name">${p.name}</div>
+              <div class="lab-detail-asin">como en <b>${p.as_in}</b></div>
+            </div>
+          </div>
+          <div class="lab-accents">
+            <button class="lab-accent ${labLang === 'en-US' ? 'active' : ''}" onclick="setLabLang('en-US', this)">🇺🇸 US</button>
+            <button class="lab-accent ${labLang === 'en-GB' ? 'active' : ''}" onclick="setLabLang('en-GB', this)">🇬🇧 UK</button>
+            <button class="btn-shadow-listen" onclick="labSpeak('${spk(p.as_in)}', this)">${ear} Escuchar</button>
+          </div>
+          <div class="lab-sec"><div class="lab-sec-t">📖 Cómo suena</div><p>${p.explanation || ''}</p></div>
+          <div class="lab-sec"><div class="lab-sec-t">👄 Posición de boca y lengua</div><p>${p.mouth || ''}</p></div>
+          ${wordChips ? `<div class="lab-sec"><div class="lab-sec-t">📝 Palabras frecuentes (toca para oír)</div><div class="lab-words">${wordChips}</div></div>` : ''}
+          ${pairRows ? `<div class="lab-sec"><div class="lab-sec-t">⚖️ Pares mínimos (distingue el sonido)</div>${pairRows}</div>` : ''}
+          ${phraseRows ? `<div class="lab-sec"><div class="lab-sec-t">💬 Frases · escucha, grábate y compara</div>${phraseRows}</div>` : ''}
+        </div>`;
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+
+    // ── Micrófono del laboratorio (una frase a la vez) ────────────
+    let labRecog = null, labRecorder = null, labChunks = [], labListening = false, labMicIdx = -1;
+
+    function labPhraseMic(i) {
+      if (labListening && labMicIdx === i) { stopLabMic(); return; }
+      stopLabMic();
+      labMicIdx = i;
+      startLabMic(currentSound.phrases[i], i);
+    }
+
+    async function startLabMic(expected, i) {
+      const btn = document.getElementById('lab-mic-' + i);
+      const fb  = document.getElementById('lab-fb-' + i);
+      fb.classList.remove('hidden');
+      fb.innerHTML = '🎤 Escuchando...';
+
+      if (useCloudSTT()) {
+        let stream;
+        try { stream = await navigator.mediaDevices.getUserMedia({ audio: true }); }
+        catch (e) { fb.innerHTML = 'No pude acceder al micrófono.'; return; }
+        labChunks = [];
+        let opts = {};
+        if (window.MediaRecorder && MediaRecorder.isTypeSupported) {
+          if (MediaRecorder.isTypeSupported('audio/webm'))     opts = { mimeType: 'audio/webm' };
+          else if (MediaRecorder.isTypeSupported('audio/mp4')) opts = { mimeType: 'audio/mp4' };
+        }
+        try { labRecorder = new MediaRecorder(stream, opts); }
+        catch (e) { labRecorder = new MediaRecorder(stream); }
+        labRecorder.ondataavailable = e => { if (e.data && e.data.size > 0) labChunks.push(e.data); };
+        labRecorder.onstop = async () => {
+          stream.getTracks().forEach(t => t.stop());
+          const type = (labChunks[0] && labChunks[0].type) || 'audio/webm';
+          const blob = new Blob(labChunks, { type }); labChunks = [];
+          if (blob.size < 1200) { fb.innerHTML = 'No te escuché. Intenta de nuevo 🎤'; return; }
+          fb.innerHTML = '⏳ Comparando...';
+          try {
+            const ext = type.includes('mp4') ? 'mp4' : 'webm';
+            const form = new FormData();
+            form.append('file', blob, 'audio.' + ext);
+            form.append('language', 'en');
+            const { data, error } = await sb.functions.invoke('transcribe', { body: form });
+            if (error) throw new Error(error.message);
+            const said = (data && data.text ? data.text : '').trim();
+            gradeLabPhrase(expected, said, i);
+          } catch (e) { fb.innerHTML = 'Error: ' + (e.message || e); }
+        };
+        labRecorder.start();
+        labListening = true; btn.classList.add('listening');
+        fb.innerHTML = '🔴 Grabando... oprime otra vez al terminar';
+      } else {
+        const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+        if (!SR) { fb.innerHTML = 'Tu navegador no soporta reconocimiento de voz.'; return; }
+        labRecog = new SR();
+        labRecog.lang = 'en-US'; labRecog.interimResults = false; labRecog.maxAlternatives = 3;
+        labRecog.onstart  = () => { labListening = true; btn.classList.add('listening'); fb.innerHTML = '🔴 Escuchando... di la frase'; };
+        labRecog.onresult = (e) => {
+          let best = e.results[0][0].transcript, bs = scorePronunciation(expected, best);
+          for (let k = 1; k < e.results[0].length; k++) {
+            const alt = e.results[0][k].transcript, s = scorePronunciation(expected, alt);
+            if (s.pct > bs.pct) { bs = s; best = alt; }
+          }
+          gradeLabPhrase(expected, best, i);
+        };
+        labRecog.onerror = (e) => { if (e.error === 'no-speech') fb.innerHTML = 'No te escuché 🎤'; stopLabMic(); };
+        labRecog.onend   = () => stopLabMic();
+        labRecog.start();
+      }
+    }
+
+    function stopLabMic() {
+      labListening = false;
+      if (labMicIdx >= 0) { const b = document.getElementById('lab-mic-' + labMicIdx); if (b) b.classList.remove('listening'); }
+      if (labRecog)    { try { labRecog.stop(); } catch (e) {} labRecog = null; }
+      if (labRecorder && labRecorder.state !== 'inactive') { try { labRecorder.stop(); } catch (e) {} }
+    }
+
+    function gradeLabPhrase(expected, said, i) {
+      stopLabMic();
+      const fb = document.getElementById('lab-fb-' + i);
+      if (!said) { fb.innerHTML = 'No entendí. Intenta de nuevo 🎤'; return; }
+      const score = scorePronunciation(expected, said);
+      const chips = score.wordResult.map(w =>
+        `<span class="word-chip ${w.ok ? 'word-ok' : 'word-miss'}">${w.word}</span>`).join('');
+      const cls = score.pct >= 80 ? 'score-great' : score.pct >= 50 ? 'score-good' : 'score-try';
+      fb.innerHTML = `
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:0.4rem">
+          <b>${score.pct >= 80 ? '🏆 ¡Muy bien!' : score.pct >= 50 ? '💪 Sigue puliendo' : '🔄 Repite'}</b>
+          <span class="score-badge ${cls}">${score.pct}%</span>
+        </div>
+        <div class="word-row" style="margin-bottom:0.3rem">${chips}</div>
+        <div style="color:var(--text-muted); font-size:0.78rem">Dijiste: “${said}”</div>`;
     }
 
     // ── Fetch all phrases once from Supabase ──────────────────────
@@ -2114,12 +2412,15 @@
       document.getElementById('view-linkers').classList.toggle('hidden', name !== 'linkers');
       document.getElementById('view-shadow').classList.toggle('hidden', name !== 'shadow');
       document.getElementById('view-today').classList.toggle('hidden', name !== 'today');
+      document.getElementById('view-lab').classList.toggle('hidden', name !== 'lab');
       if (name !== 'shadow') stopShadowMic();
+      if (name !== 'lab')    stopLabMic();
       if (name === 'grammar') loadGrammar();
       if (name === 'verbs')   loadVerbs();
       if (name === 'linkers') loadLinkers();
       if (name === 'shadow')  loadShadow();
       if (name === 'today')   renderToday();
+      if (name === 'lab')     loadLab();
       window.scrollTo({ top: 0, behavior: 'smooth' });
     }
 
