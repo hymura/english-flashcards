@@ -947,6 +947,8 @@
       const pct = Math.min(100, Math.round((count / DAILY_GOAL) * 100));
       document.getElementById('streak-mini-fill').style.width = pct + '%';
       document.getElementById('streak-done').classList.toggle('hidden', !dailyGoalMet);
+      const ss = document.getElementById('sidebar-streak');
+      if (ss && currentUser) ss.textContent = '🔥 ' + current + (current === 1 ? ' día' : ' días');
     }
 
     function celebrateGoal() {
@@ -1326,20 +1328,31 @@
 
     function enterApp() {
       document.getElementById('auth-overlay').style.display = 'none';
-      // Badge de usuario
+      // Pie del sidebar (usuario)
       if (currentUser) {
         const email = currentUser.email || 'Usuario';
         document.getElementById('user-email').textContent  = email;
         document.getElementById('user-avatar').textContent = email[0].toUpperCase();
-        document.getElementById('user-badge').classList.remove('hidden');
         document.getElementById('btn-progress').style.display = '';
       } else {
-        // Modo invitado
-        document.getElementById('user-badge').classList.add('hidden');
+        document.getElementById('user-email').textContent  = 'Invitado';
+        document.getElementById('user-avatar').textContent = '?';
+        document.getElementById('sidebar-streak').textContent = 'Sin cuenta';
         document.getElementById('btn-progress').style.display = 'none';
       }
-      document.getElementById('main-nav').classList.remove('hidden');
+      document.getElementById('sidebar').classList.remove('hidden');
+      document.getElementById('hamburger').classList.remove('hidden');
       loadAppData();
+    }
+
+    // ── Sidebar (drawer en móvil) ─────────────────────────────────
+    function toggleSidebar() {
+      const open = document.getElementById('sidebar').classList.toggle('open');
+      document.getElementById('sidebar-scrim').classList.toggle('show', open);
+    }
+    function closeSidebar() {
+      document.getElementById('sidebar').classList.remove('open');
+      document.getElementById('sidebar-scrim').classList.remove('show');
     }
 
     // ╔══════════════════════════════════════════════════════════╗
@@ -1347,7 +1360,10 @@
     // ╚══════════════════════════════════════════════════════════╝
     function switchView(name, el) {
       document.querySelectorAll('.nav-tab').forEach(t => t.classList.remove('active'));
-      if (el) el.classList.add('active');
+      // Marca activo el botón del sidebar aunque se llame por código
+      if (el && el.classList.contains('nav-tab')) el.classList.add('active');
+      else { const b = document.querySelector('.nav-tab[data-view="' + name + '"]'); if (b) b.classList.add('active'); }
+      closeSidebar();
       const isCards = name === 'flashcards';
       // Vista tarjetas
       document.getElementById('category-bar').classList.toggle('hidden', !isCards || allPhrases.length === 0);

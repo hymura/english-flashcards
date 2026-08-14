@@ -1,13 +1,16 @@
     :root {
-      --bg: #0f0f1a;
-      --card-front: #1e1e3a;
-      --card-back: #16213e;
+      --bg: #0b0c16;
+      --sidebar: #0e0f1b;
+      --card-front: #1a1c2e;
+      --card-back: #13151f;
       --accent: #7c3aed;
       --accent2: #a855f7;
-      --text: #e2e8f0;
-      --text-muted: #94a3b8;
+      --cyan: #22d3ee;
+      --text: #e6e8f0;
+      --text-muted: #8a90a6;
       --success: #10b981;
-      --border: #2d2d52;
+      --border: #23263a;
+      --sidebar-w: 236px;
     }
 
     * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -21,6 +24,9 @@
       flex-direction: column;
       align-items: center;
       padding: 2rem 1rem;
+    }
+    @media (min-width: 901px) {
+      body { padding-left: calc(var(--sidebar-w) + 2rem); padding-right: 2rem; }
     }
 
     h1 {
@@ -385,32 +391,18 @@
     }
     .fade-in { animation: fadeIn 0.4s ease forwards; }
 
-    /* ── User badge (top-right) ── */
-    .user-badge {
-      position: fixed;
-      top: 1rem; right: 1rem;
-      display: flex;
-      align-items: center;
-      gap: 0.6rem;
-      background: #15152e;
-      border: 1px solid var(--border);
-      border-radius: 99px;
-      padding: 0.35rem 0.35rem 0.35rem 0.9rem;
-      z-index: 500;
-      font-size: 0.82rem;
-    }
-    .user-badge .user-email { color: var(--text); max-width: 150px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    /* ── User avatar + logout (pie del sidebar) ── */
     .user-avatar {
-      width: 30px; height: 30px; border-radius: 50%;
+      width: 34px; height: 34px; border-radius: 50%; flex-shrink: 0;
       background: linear-gradient(135deg,#7c3aed,#a855f7);
       display: flex; align-items: center; justify-content: center;
-      font-weight: 800; color: #fff; font-size: 0.85rem;
+      font-weight: 800; color: #fff; font-size: 0.9rem;
     }
     .btn-logout {
-      background: var(--card-front); border: 1px solid var(--border);
-      color: var(--text-muted); border-radius: 99px;
-      padding: 0.3rem 0.7rem; font-size: 0.75rem; font-weight: 600; cursor: pointer;
-      transition: all 0.2s;
+      background: none; border: 1px solid var(--border);
+      color: var(--text-muted); border-radius: 9px; flex-shrink: 0;
+      width: 32px; height: 32px; display: flex; align-items: center; justify-content: center;
+      cursor: pointer; transition: all 0.2s;
     }
     .btn-logout:hover { background: rgba(239,68,68,0.15); color: #f87171; border-color: rgba(239,68,68,0.3); }
 
@@ -568,20 +560,60 @@
     .prog-cat-bar  { height: 8px; background: var(--border); border-radius: 99px; overflow: hidden; }
     .prog-cat-fill { height: 100%; background: linear-gradient(90deg,#10b981,#34d399); border-radius: 99px; transition: width 0.6s ease; }
 
-    /* ── Main navigation tabs ── */
-    .main-nav {
-      display: flex; gap: 0.5rem; justify-content: center; flex-wrap: wrap;
-      margin-bottom: 1.75rem; width: 100%; max-width: 560px;
+    /* ══ SIDEBAR ══ */
+    .sidebar {
+      position: fixed; top: 0; left: 0; height: 100vh; width: var(--sidebar-w);
+      background: var(--sidebar); border-right: 1px solid var(--border);
+      display: flex; flex-direction: column; z-index: 900; padding: 1.1rem 0.85rem;
     }
+    .sidebar-logo {
+      display: flex; align-items: center; gap: 0.6rem; padding: 0.3rem 0.5rem 1.1rem;
+      font-weight: 800; font-size: 1.02rem; color: #f1f5f9;
+    }
+    .logo-badge {
+      width: 34px; height: 34px; border-radius: 10px; flex-shrink: 0;
+      background: linear-gradient(135deg,#7c3aed,#a855f7); color: #fff;
+      display: flex; align-items: center; justify-content: center; font-size: 0.85rem; font-weight: 800;
+    }
+    .sidebar-nav { display: flex; flex-direction: column; gap: 0.15rem; overflow-y: auto; flex: 1; }
     .nav-tab {
-      background: #15152e; border: 1px solid var(--border); color: var(--text-muted);
-      padding: 0.5rem 1.1rem; border-radius: 12px; font-size: 0.9rem; font-weight: 700;
-      cursor: pointer; transition: all 0.2s; display: flex; align-items: center; gap: 0.4rem;
+      display: flex; align-items: center; gap: 0.75rem; width: 100%;
+      background: none; border: none; color: var(--text-muted);
+      padding: 0.6rem 0.7rem; border-radius: 10px; font-size: 0.92rem; font-weight: 600;
+      cursor: pointer; transition: all 0.15s; text-align: left;
     }
-    .nav-tab:hover { color: var(--text); border-color: var(--accent2); }
+    .nav-tab svg { width: 19px; height: 19px; flex-shrink: 0; fill: none; stroke: currentColor; stroke-width: 1.9; stroke-linecap: round; stroke-linejoin: round; }
+    .nav-tab:hover { background: rgba(255,255,255,0.04); color: var(--text); }
     .nav-tab.active {
-      background: linear-gradient(135deg,#7c3aed,#a855f7); color: #fff; border-color: transparent;
-      box-shadow: 0 4px 14px rgba(124,58,237,0.4);
+      background: linear-gradient(135deg, rgba(124,58,237,0.9), rgba(168,85,247,0.9));
+      color: #fff; box-shadow: 0 4px 14px rgba(124,58,237,0.3);
+    }
+    .sidebar-foot {
+      display: flex; align-items: center; gap: 0.6rem; margin-top: 0.75rem;
+      padding: 0.6rem; border-top: 1px solid var(--border);
+    }
+    .sidebar-user { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+    .sidebar-user .user-email { color: var(--text); font-size: 0.82rem; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .sidebar-streak { color: var(--text-muted); font-size: 0.72rem; }
+
+    /* Hamburger + scrim (móvil) */
+    .hamburger {
+      position: fixed; top: 0.85rem; left: 0.85rem; z-index: 950;
+      width: 42px; height: 42px; border-radius: 11px;
+      background: var(--sidebar); border: 1px solid var(--border); color: var(--text);
+      display: none; align-items: center; justify-content: center; cursor: pointer;
+    }
+    .sidebar-scrim {
+      position: fixed; inset: 0; background: rgba(0,0,0,0.55); z-index: 890;
+      opacity: 0; pointer-events: none; transition: opacity 0.25s;
+    }
+    .sidebar-scrim.show { opacity: 1; pointer-events: auto; }
+
+    @media (max-width: 900px) {
+      body { padding-top: 4.2rem; }
+      .hamburger { display: flex; }
+      .sidebar { transform: translateX(-100%); transition: transform 0.25s ease; box-shadow: 0 0 40px rgba(0,0,0,0.5); }
+      .sidebar.open { transform: translateX(0); }
     }
 
     /* ── Study views (grammar / verbs) ── */
