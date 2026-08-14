@@ -87,17 +87,37 @@
       let total = 0;
       TODAY_TYPES.forEach(t => { counts[t.key] = dueIds(t.key).length; total += counts[t.key]; });
       const { current } = computeStreaks();
-      const streakLine = `🔥 Racha: <b style="color:#fb923c">${current}</b> ${current === 1 ? 'día' : 'días'}`;
 
-      let html = '';
+      const h = new Date().getHours();
+      const greet = h < 12 ? 'Buenos días' : h < 19 ? 'Buenas tardes' : 'Buenas noches';
+      const name  = (currentUser.email || '').split('@')[0] || '';
+      const done  = studiedTodayIds.size;
+      const goalPct = Math.min(100, Math.round(done / DAILY_GOAL * 100));
+      const goalMet = done >= DAILY_GOAL;
+
+      const ctaLabel = total > 0 ? '▶  Continuar repasando'
+                     : goalMet   ? '✨  Aprender algo nuevo'
+                     :             '▶  Empezar a practicar';
+      const ctaSub = total > 0
+        ? `${total} repaso${total === 1 ? '' : 's'} pendiente${total === 1 ? '' : 's'}  ·  🔥 ${current} ${current === 1 ? 'día' : 'días'}`
+        : `🔥 Racha de ${current} ${current === 1 ? 'día' : 'días'} · ¡sigue así!`;
+
+      let html = `
+        <div class="today-hero2">
+          <div class="today-greet2">${greet}${name ? ', ' + escapeHtml(name) : ''} 👋</div>
+          <div class="today-goal">
+            <div class="today-goal-top">
+              <span>🎯 Meta de hoy</span>
+              <span>${goalMet ? '¡cumplida! 🎉' : done + ' / ' + DAILY_GOAL + ' frases'}</span>
+            </div>
+            <div class="today-goal-bar"><div class="today-goal-fill" style="width:${goalPct}%"></div></div>
+          </div>
+          <button class="btn-continue" onclick="continueToday()">${ctaLabel}</button>
+          <div class="today-cta-sub">${ctaSub}</div>
+        </div>`;
+
       if (total > 0) {
-        html += `
-          <div class="today-hero">
-            <div class="today-greet">Tu plan de hoy</div>
-            <div class="today-sub">${streakLine}</div>
-            <div class="today-due-num">${total}</div>
-            <div class="today-due-label">repasos pendientes</div>
-          </div>`;
+        html += '<div class="today-section-t">Repasos pendientes</div>';
         TODAY_TYPES.forEach(t => {
           if (!counts[t.key]) return;
           html += `
@@ -112,26 +132,31 @@
         });
       } else {
         html += `
-          <div class="today-hero">
-            <div class="today-sub">${streakLine}</div>
-            <div class="today-allclear">
-              <div class="today-allclear-icon">🎉</div>
-              <h3>¡Estás al día!</h3>
-              <p>No tienes repasos pendientes hoy. Aprende algo nuevo para seguir creciendo — se irá agendando solo.</p>
-              <button class="btn btn-primary" style="width:100%; justify-content:center; margin-bottom:0.6rem;" onclick="openTab('shadow')">🗣️ Practicar Shadowing</button>
-              <button class="btn btn-secondary" style="width:100%; justify-content:center;" onclick="openTab('flashcards')">🃏 Ver tarjetas</button>
-            </div>
+          <div class="today-allclear" style="padding:0.5rem 0 1.25rem">
+            <div class="today-allclear-icon">🎉</div>
+            <h3>¡Estás al día!</h3>
+            <p>No tienes repasos pendientes. Sigue practicando y se agenda solo.</p>
           </div>`;
       }
 
       html += `
+        <div class="today-section-t">Tu progreso</div>
         <div class="today-mini">
           <div class="today-mini-card"><div class="today-mini-num" style="color:#fb923c">${current}</div><div class="today-mini-label">Racha</div></div>
-          <div class="today-mini-card"><div class="today-mini-num" style="color:#10b981">${studiedTodayIds.size}</div><div class="today-mini-label">Hoy</div></div>
+          <div class="today-mini-card"><div class="today-mini-num" style="color:#10b981">${done}</div><div class="today-mini-label">Hoy</div></div>
           <div class="today-mini-card"><div class="today-mini-num" style="color:#a855f7">${srsMap.size}</div><div class="today-mini-label">En repaso</div></div>
         </div>`;
 
       box.innerHTML = html;
+    }
+
+    // El botón grande: repasa lo más urgente, o practica si no hay nada
+    function continueToday() {
+      const order = ['phrase', 'verb', 'linker', 'question'];
+      let best = null, max = 0;
+      order.forEach(t => { const n = dueIds(t).length; if (n > max) { max = n; best = t; } });
+      if (best) reviewDue(best);
+      else openTab('shadow');
     }
 
     // Lanza el repaso de un tipo, filtrado a los items vencidos

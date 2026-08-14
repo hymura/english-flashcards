@@ -880,7 +880,7 @@
     .shadow-controls { display: flex; gap: 1rem; }
     .shadow-controls .btn { flex: 1; justify-content: center; }
 
-    /* ── Dashboard "Hoy" (SRS) ── */
+    /* ── Dashboard "Inicio" (SRS) ── */
     .today-hero {
       background: linear-gradient(145deg, #1e1e3a, #16213e);
       border: 1px solid var(--border); border-radius: 20px;
@@ -894,6 +894,32 @@
       -webkit-background-clip: text; -webkit-text-fill-color: transparent;
     }
     .today-due-label { font-size: 0.85rem; color: var(--text-muted); }
+
+    /* Hero v2 — "¿qué hago ahora?" */
+    .today-hero2 {
+      background: radial-gradient(120% 120% at 0% 0%, rgba(124,58,237,0.16), transparent 55%), linear-gradient(160deg,#191b2c,#121420);
+      border: 1px solid var(--border); border-radius: 22px;
+      padding: 1.6rem 1.5rem; margin-bottom: 1.5rem;
+    }
+    .today-greet2 { font-size: 1.55rem; font-weight: 800; color: #f5f6fb; margin-bottom: 1.1rem; }
+    .today-goal { margin-bottom: 1.25rem; }
+    .today-goal-top { display: flex; justify-content: space-between; font-size: 0.82rem; color: var(--text-muted); margin-bottom: 0.45rem; }
+    .today-goal-top span:last-child { color: var(--text); font-weight: 700; }
+    .today-goal-bar { height: 9px; background: rgba(255,255,255,0.07); border-radius: 99px; overflow: hidden; }
+    .today-goal-fill { height: 100%; background: linear-gradient(90deg,#22d3ee,#0ea5e9); border-radius: 99px; transition: width 0.6s ease; }
+    .btn-continue {
+      width: 100%; border: none; cursor: pointer; border-radius: 14px;
+      padding: 1rem; font-size: 1.05rem; font-weight: 800; color: #fff;
+      background: linear-gradient(135deg,#7c3aed,#a855f7);
+      box-shadow: 0 8px 24px rgba(124,58,237,0.4); transition: all 0.2s;
+    }
+    .btn-continue:hover { transform: translateY(-2px); box-shadow: 0 12px 30px rgba(124,58,237,0.5); }
+    .btn-continue:active { transform: translateY(0); }
+    .today-cta-sub { text-align: center; font-size: 0.82rem; color: var(--text-muted); margin-top: 0.75rem; }
+    .today-section-t {
+      font-size: 0.72rem; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase;
+      color: var(--text-muted); margin: 0 0 0.7rem 0.15rem;
+    }
 
     .today-row {
       display: flex; align-items: center; gap: 0.9rem;
