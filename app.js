@@ -911,7 +911,7 @@
           dailyGoalMet = todayRow.goal_met;
         }
       }
-      document.getElementById('streak-bar').classList.remove('hidden');
+      // La barra de racha ya no se muestra en Tarjetas (está en el sidebar e Inicio)
       document.getElementById('streak-goal').textContent = DAILY_GOAL;
       updateStreakUI();
     }
@@ -2789,16 +2789,23 @@
     // Refleja en la UI si la frase actual está dominada
     function reflectMastered(phraseId) {
       const isMastered = progressMap.get(phraseId)?.status === 'mastered';
-      const btn    = document.getElementById('btn-master');
       const ribbon = document.getElementById('master-ribbon');
-      // Modo invitado: ocultar botón de dominar
-      btn.style.display = currentUser ? 'flex' : 'none';
-      btn.classList.toggle('mastered', isMastered);
-      btn.title = isMastered ? 'Dominada ✓ (click para desmarcar)' : 'Marcar como dominada';
-      ribbon.classList.toggle('show', isMastered && !!currentUser);
+      if (ribbon) ribbon.classList.toggle('show', isMastered && !!currentUser);
     }
 
-    // Botón "ya la domino"
+    // Calificar la tarjeta: "No lo sé" / "Lo tengo" (alimenta el SRS) y avanzar
+    function rateCard(quality) {
+      const p = phrases[current];
+      if (p && currentUser) {
+        const status = quality === 'good' ? 'mastered' : 'practicing';
+        saveProgress(p.id, { status }).then(() => { reflectMastered(p.id); updateStats(); });
+        scheduleSrs('phrase', p.id, quality);
+        markPhraseStudied(p.id);
+      }
+      nextCard();
+    }
+
+    // Alterna dominada (atajo 'm')
     async function toggleMastered() {
       if (!currentUser) return;
       const p = phrases[current];

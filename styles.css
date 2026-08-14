@@ -112,6 +112,22 @@
       flex: 1;
     }
 
+    /* ── Compactar Tarjetas en móvil (evita que "se salga") ── */
+    @media (max-width: 640px) {
+      .category-bar {
+        flex-wrap: nowrap; overflow-x: auto; justify-content: flex-start;
+        padding-bottom: 5px; -webkit-overflow-scrolling: touch; scrollbar-width: none;
+      }
+      .category-bar::-webkit-scrollbar { display: none; }
+      .cat-chip { flex: 0 0 auto; }
+      .timer-bar { gap: 0.55rem; padding: 0.5rem 0.75rem; margin-bottom: 1rem; }
+      .timer-display { font-size: 1.15rem; }
+      .btn-timer { padding: 0.4rem 0.7rem; font-size: 0.74rem; }
+      .scene { height: 250px; margin-bottom: 1rem; }
+      .controls { gap: 0.45rem; }
+      .controls .btn { padding: 0.7rem 0.4rem; font-size: 0.82rem; min-width: 0; white-space: nowrap; gap: 0.3rem; }
+    }
+
     .timer-display.running { color: #a855f7; }
     .timer-display.paused  { color: var(--text-muted); }
 
@@ -230,6 +246,14 @@
     .btn-secondary:hover { background: var(--border); }
     .btn-flip { background: rgba(16,185,129,0.15); color: #10b981; border: 1px solid rgba(16,185,129,0.3); flex: 1; justify-content: center; min-width: 140px; }
     .btn-flip:hover { background: rgba(16,185,129,0.25); }
+    /* Calificación de tarjeta */
+    .btn-dontknow { background: rgba(239,68,68,0.14); color: #f87171; border: 1px solid rgba(239,68,68,0.35); flex: 1; justify-content: center; min-width: 100px; }
+    .btn-dontknow:hover { background: rgba(239,68,68,0.24); }
+    .btn-know { background: rgba(16,185,129,0.15); color: #10b981; border: 1px solid rgba(16,185,129,0.35); flex: 1; justify-content: center; min-width: 100px; }
+    .btn-know:hover { background: rgba(16,185,129,0.25); }
+    .controls-hint { text-align: center; margin-top: 0.7rem; }
+    .controls-hint a { color: var(--text-muted); font-size: 0.8rem; cursor: pointer; }
+    .controls-hint a:hover { color: var(--text); }
 
     /* Stats */
     .stats { display: flex; gap: 1.5rem; margin-top: 2rem; flex-wrap: wrap; justify-content: center; }
