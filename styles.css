@@ -1,3 +1,26 @@
+    /* ── Botón flotante + modal "Agregar frase" ── */
+    .fab-add {
+      position: fixed; bottom: 1.5rem; right: 1.5rem; z-index: 800;
+      width: 56px; height: 56px; border-radius: 50%; border: none; cursor: pointer;
+      background: linear-gradient(135deg,#7c3aed,#a855f7); color: #fff;
+      box-shadow: 0 10px 28px rgba(124,58,237,0.5);
+      display: flex; align-items: center; justify-content: center; transition: all 0.2s;
+    }
+    .fab-add:hover { transform: scale(1.09); box-shadow: 0 14px 34px rgba(124,58,237,0.6); }
+    .fab-add:active { transform: scale(0.97); }
+    .addp-label { font-size: 0.78rem; color: var(--text-muted); margin: 0.85rem 0 0.35rem; font-weight: 600; }
+    .addp-src-row { display: flex; gap: 0.5rem; align-items: stretch; }
+    .addp-input {
+      width: 100%; background: #1a1a35; border: 1px solid var(--border); color: var(--text);
+      border-radius: 12px; padding: 0.7rem 0.9rem; font-size: 0.95rem; font-family: inherit; line-height: 1.4; resize: none;
+    }
+    .addp-input:focus { outline: none; border-color: var(--accent2); }
+    .addp-input::placeholder { color: #5a5a7a; }
+    .addp-src-row .chat-mic { align-self: stretch; height: auto; }
+    .addp-msg { text-align: center; margin-top: 0.85rem; font-size: 0.85rem; color: var(--text-muted); min-height: 1rem; }
+    .addp-msg.ok { color: #6ee7b7; }
+    .addp-msg.err { color: #f87171; }
+
     :root {
       --bg: #0b0c16;
       --sidebar: #0e0f1b;

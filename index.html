@@ -567,6 +567,41 @@
     </div>
   </div>
 
+  <!-- ── Botón flotante: Agregar frase ── -->
+  <button class="fab-add hidden" id="fab-add" onclick="openAddPhrase()" title="Agregar frase" aria-label="Agregar frase">
+    <svg width="26" height="26" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+  </button>
+
+  <!-- ── Modal: Agregar frase ── -->
+  <div class="modal-overlay hidden" id="addphrase-modal">
+    <div class="modal">
+      <button class="modal-close" onclick="closeAddPhrase()">✕</button>
+      <div class="report-title">➕ Agregar frase</div>
+      <div class="report-subtitle">Escribe lo que se te ocurrió — la traduzco al inglés natural y la guardo en tu banco.</div>
+
+      <div class="addp-label">Tu frase (en español o inglés)</div>
+      <div class="addp-src-row">
+        <textarea class="addp-input" id="addp-source" rows="2" placeholder="Ej: no me lo esperaba" onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();translatePhrase();}"></textarea>
+        <button class="chat-mic" id="addp-mic" onclick="toggleAddMic()" title="Dictar en español">
+          <svg width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><rect x="9" y="2" width="6" height="11" rx="3"/><path d="M5 10a7 7 0 0 0 14 0"/><line x1="12" y1="19" x2="12" y2="22"/><line x1="9" y1="22" x2="15" y2="22"/></svg>
+        </button>
+      </div>
+      <button class="btn btn-primary" id="addp-translate" style="width:100%; justify-content:center; margin-top:0.75rem;" onclick="translatePhrase()">✨ Traducir</button>
+
+      <div id="addp-preview" class="hidden">
+        <div class="addp-label" style="display:flex; align-items:center; gap:0.4rem;">🇬🇧 Inglés
+          <button class="lab-word" style="padding:0.1rem 0.45rem; font-size:0.72rem" onclick="speakEnglish(document.getElementById('addp-en').value, this)">🔊</button>
+        </div>
+        <input class="addp-input" id="addp-en" />
+        <div class="addp-label">🇪🇸 Español</div>
+        <input class="addp-input" id="addp-es" />
+        <button class="btn btn-primary" style="width:100%; justify-content:center; margin-top:1rem;" onclick="saveNewPhrase()">💾 Guardar en mi banco</button>
+      </div>
+
+      <div id="addp-msg" class="addp-msg"></div>
+    </div>
+  </div>
+
   <script src="app.js"></script>
 </body>
 </html>

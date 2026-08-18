@@ -814,6 +814,142 @@
       t.textContent = msg;
     }
 
+    // ╔══════════════════════════════════════════════════════════╗
+    // ║  AGREGAR FRASE (captura rápida: español → inglés → banco)║
+    // ╚══════════════════════════════════════════════════════════╝
+    function openAddPhrase() {
+      if (!currentUser) { alert('Inicia sesión para agregar tus propias frases.'); return; }
+      document.getElementById('addp-source').value = '';
+      document.getElementById('addp-en').value = '';
+      document.getElementById('addp-es').value = '';
+      document.getElementById('addp-preview').classList.add('hidden');
+      setAddMsg('', '');
+      document.getElementById('addphrase-modal').classList.remove('hidden');
+      setTimeout(() => document.getElementById('addp-source').focus(), 100);
+    }
+    function closeAddPhrase() {
+      stopAddMic();
+      document.getElementById('addphrase-modal').classList.add('hidden');
+    }
+    function setAddMsg(text, type) {
+      const el = document.getElementById('addp-msg');
+      el.textContent = text; el.className = 'addp-msg ' + (type || '');
+    }
+
+    async function translatePhrase() {
+      const src = document.getElementById('addp-source').value.trim();
+      if (!src) return;
+      const btn = document.getElementById('addp-translate');
+      btn.disabled = true; btn.textContent = '⏳ Traduciendo...';
+      setAddMsg('', '');
+      try {
+        const sys = 'You translate short phrases for a Spanish-speaking English learner. '
+          + 'The input may be Spanish or English. Reply with ONLY a JSON object like '
+          + '{"en":"natural idiomatic English","es":"Spanish"}. '
+          + 'Make the English sound like a real native speaker would say it, not a literal translation. No extra text.';
+        const { data, error } = await sb.functions.invoke('chat', { body: { messages: [
+          { role: 'system', content: sys }, { role: 'user', content: src }
+        ] } });
+        if (error) throw new Error(error.message);
+        let txt = (data && data.reply ? data.reply : '').trim().replace(/```json|```/g, '').trim();
+        const m = txt.match(/\{[\s\S]*\}/);
+        const obj = JSON.parse(m ? m[0] : txt);
+        const en = (obj.en || '').trim(), es = (obj.es || '').trim();
+        if (!en) throw new Error('sin traducción');
+        document.getElementById('addp-en').value = en;
+        document.getElementById('addp-es').value = es || src;
+        document.getElementById('addp-preview').classList.remove('hidden');
+        speakEnglish(en);
+      } catch (e) {
+        setAddMsg('No pude traducir: ' + (e.message || e), 'err');
+      } finally {
+        btn.disabled = false; btn.textContent = '✨ Traducir';
+      }
+    }
+
+    async function saveNewPhrase() {
+      const en = document.getElementById('addp-en').value.trim();
+      const es = document.getElementById('addp-es').value.trim();
+      if (!en || !es) { setAddMsg('Faltan el inglés o el español.', 'err'); return; }
+      if (allPhrases.some(p => (p.phrase || '').toLowerCase() === en.toLowerCase())) {
+        setAddMsg('Ya tienes esa frase guardada. 👍', 'ok'); return;
+      }
+      const newId = Math.max(0, ...allPhrases.map(p => p.id || 0)) + 1;
+      const { error } = await sb.from('phrases').insert({
+        phrase_id: newId, phrase_name: en, phrase_translation: es, category: 'Mis frases'
+      });
+      if (error) { setAddMsg('No pude guardar: ' + error.message, 'err'); return; }
+      allPhrases.push({ id: newId, phrase: en, translation: es, description: '', category: 'Mis frases' });
+      loadCategories();
+      setAddMsg('✓ Guardada: "' + en + '"  →  la verás en Tarjetas y Shadowing (categoría "Mis frases").', 'ok');
+      document.getElementById('addp-preview').classList.add('hidden');
+      document.getElementById('addp-source').value = '';
+    }
+
+    // Dictado en español para agregar frase
+    let addRecog = null, addRecorder = null, addChunks = [], addListening = false;
+    function toggleAddMic() { addListening ? stopAddMic() : startAddMic(); }
+
+    async function startAddMic() {
+      const btn = document.getElementById('addp-mic');
+      const input = document.getElementById('addp-source');
+      if (useCloudSTT()) {
+        let stream;
+        try { stream = await navigator.mediaDevices.getUserMedia({ audio: true }); }
+        catch (e) { setAddMsg('No pude acceder al micrófono.', 'err'); return; }
+        addChunks = [];
+        let opts = {};
+        if (window.MediaRecorder && MediaRecorder.isTypeSupported) {
+          if (MediaRecorder.isTypeSupported('audio/webm'))     opts = { mimeType: 'audio/webm' };
+          else if (MediaRecorder.isTypeSupported('audio/mp4')) opts = { mimeType: 'audio/mp4' };
+        }
+        try { addRecorder = new MediaRecorder(stream, opts); }
+        catch (e) { addRecorder = new MediaRecorder(stream); }
+        addRecorder.ondataavailable = e => { if (e.data && e.data.size > 0) addChunks.push(e.data); };
+        addRecorder.onstop = async () => {
+          stream.getTracks().forEach(t => t.stop());
+          const type = (addChunks[0] && addChunks[0].type) || 'audio/webm';
+          const blob = new Blob(addChunks, { type }); addChunks = [];
+          if (blob.size < 1200) return;
+          setAddMsg('⏳ Transcribiendo...', '');
+          try {
+            const ext = type.includes('mp4') ? 'mp4' : 'webm';
+            const form = new FormData();
+            form.append('file', blob, 'audio.' + ext);
+            form.append('language', 'es');   // dictado en español
+            const { data, error } = await sb.functions.invoke('transcribe', { body: form });
+            if (error) throw new Error(error.message);
+            const said = (data && data.text ? data.text : '').trim();
+            setAddMsg('', '');
+            if (said) { input.value = (input.value ? input.value + ' ' : '') + said; input.focus(); }
+          } catch (e) { setAddMsg('Error al transcribir', 'err'); }
+        };
+        addRecorder.start();
+        addListening = true; btn.classList.add('listening');
+      } else {
+        const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+        if (!SR) { setAddMsg('Tu navegador no soporta voz. Escribe la frase.', 'err'); return; }
+        addRecog = new SR();
+        addRecog.lang = 'es-ES'; addRecog.interimResults = false; addRecog.maxAlternatives = 1;
+        addRecog.onstart  = () => { addListening = true; btn.classList.add('listening'); };
+        addRecog.onresult = (e) => {
+          const said = e.results[0][0].transcript.trim();
+          if (said) { input.value = (input.value ? input.value + ' ' : '') + said; input.focus(); }
+        };
+        addRecog.onerror = () => stopAddMic();
+        addRecog.onend   = () => stopAddMic();
+        addRecog.start();
+      }
+    }
+
+    function stopAddMic() {
+      addListening = false;
+      const btn = document.getElementById('addp-mic');
+      if (btn) btn.classList.remove('listening');
+      if (addRecog)    { try { addRecog.stop(); } catch (e) {} addRecog = null; }
+      if (addRecorder && addRecorder.state !== 'inactive') { try { addRecorder.stop(); } catch (e) {} }
+    }
+
     // ── Fetch all phrases once from Supabase ──────────────────────
     async function fetchAllPhrases() {
       // Supabase devuelve máx. 1000 filas por consulta -> paginamos para traerlas todas
@@ -1367,6 +1503,7 @@
       }
       document.getElementById('sidebar').classList.remove('hidden');
       document.getElementById('hamburger').classList.remove('hidden');
+      document.getElementById('fab-add').classList.toggle('hidden', !currentUser);
       loadAppData();
     }
 
@@ -1415,6 +1552,8 @@
       if (name === 'lab')     loadLab();
       if (name === 'chat')    loadChat();
       if (name === 'dict')    setTimeout(() => document.getElementById('dict-input').focus(), 100);
+      // El "+" flotante estorba donde ya hay caja de texto abajo
+      document.getElementById('fab-add').classList.toggle('hidden', !currentUser || name === 'chat' || name === 'dict');
       window.scrollTo({ top: 0, behavior: 'smooth' });
     }
 
@@ -3166,7 +3305,9 @@
 
       const reportOpen   = !document.getElementById('report-modal').classList.contains('hidden');
       const progressOpen = !document.getElementById('progress-modal').classList.contains('hidden');
+      const addpOpen     = !document.getElementById('addphrase-modal').classList.contains('hidden');
 
+      if (addpOpen)     { if (e.key === 'Escape') closeAddPhrase();         return; }
       if (reportOpen)   { if (e.key === 'Escape') closeReport();            return; }
       if (progressOpen) { if (e.key === 'Escape') closeProgressDashboard(); return; }
 
