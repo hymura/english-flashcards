@@ -821,6 +821,22 @@
     .miss-item { font-size: 0.85rem; color: var(--text); margin-bottom: 0.2rem; }
     .miss-item b { color: #fca5a5; }
 
+    /* ── Panel de progreso (acción primero) ── */
+    .prog-action-card {
+      background: radial-gradient(120% 120% at 100% 0%, rgba(239,68,68,0.1), transparent 55%), #14121e;
+      border: 1px solid rgba(239,68,68,0.25); border-radius: 18px;
+      padding: 1.1rem 1.15rem; margin-bottom: 1.5rem;
+    }
+    .prog-action-card.prog-allgood {
+      background: radial-gradient(120% 120% at 100% 0%, rgba(16,185,129,0.12), transparent 55%), #12161c;
+      border-color: rgba(16,185,129,0.3); text-align: center;
+    }
+    .prog-action-title { font-size: 1rem; font-weight: 800; color: #f1f5f9; margin-bottom: 0.75rem; }
+    .prog-allgood-icon { font-size: 2.6rem; margin-bottom: 0.4rem; }
+    .prog-allgood p { color: var(--text-muted); font-size: 0.88rem; margin-top: 0.4rem; }
+    .prog-more { font-size: 0.78rem; color: var(--text-muted); text-align: center; margin: 0.4rem 0 0.2rem; }
+    .prog-cta { width: 100%; justify-content: center; margin-top: 0.9rem; font-size: 1rem; padding: 0.85rem; }
+
     /* ── Panel de progreso de conectores ── */
     .lp-summary { display: grid; grid-template-columns: repeat(3, 1fr); gap: 0.6rem; margin-bottom: 1.5rem; }
     .lp-card { background: #1a1a35; border: 1px solid var(--border); border-radius: 14px; padding: 0.85rem; text-align: center; }

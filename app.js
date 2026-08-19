@@ -1984,45 +1984,73 @@
 
     function practiceWeakGrammar() { setGrammarMode('quiz'); startGrammarQuiz(true); }
 
-    function renderGrammarStats() {
-      const box = document.getElementById('grammar-stats');
-      if (!currentUser) {
-        box.innerHTML = '<div class="no-data">🔐 Inicia sesión para guardar y ver tu progreso de preguntas.</div>';
-        return;
-      }
-      if (!grammarData) { box.innerHTML = '<div class="no-data">Cargando...</div>'; return; }
-      const s = grammarStats();
-      if (s.practiced === 0) {
-        box.innerHTML = '<div class="no-data">Todavía no has practicado preguntas.<br>Ve a <b>🎯 Practicar</b> y haz tu primer quiz.</div>';
-        return;
-      }
+    // Panel de progreso ACCIÓN-PRIMERO, compartido por conectores/verbos/preguntas
+    function renderProgressPanel(boxId, s, cfg) {
+      const box = document.getElementById(boxId);
+      if (!currentUser) { box.innerHTML = '<div class="no-data">🔐 Inicia sesión para guardar y ver tu progreso.</div>'; return; }
+      if (!cfg.dataReady) { box.innerHTML = '<div class="no-data">Cargando...</div>'; return; }
+      if (s.practiced === 0) { box.innerHTML = '<div class="no-data">' + cfg.emptyMsg + '</div>'; return; }
+
       const acc = s.totalAttempts ? Math.round(s.totalCorrect / s.totalAttempts * 100) : 0;
-      const cls = acc >= 80 ? 'score-circle-great' : acc >= 50 ? 'score-circle-good' : 'score-circle-try';
-      const rowHtml = (r, kind) => `
+      const accColor = acc >= 80 ? '#10b981' : acc >= 50 ? '#fbbf24' : '#f87171';
+      const row = (r, kind) => `
         <div class="lp-row ${kind}">
-          <span class="lp-word" style="flex:1.6">${r.topic.title}</span>
-          <span class="lp-tr">${r.topic.title_es || ''}</span>
+          <span class="lp-word">${cfg.wordOf(r)}</span>
+          <span class="lp-tr">${cfg.subOf(r)}</span>
           <span class="lp-acc">${Math.round(r.acc * 100)}%</span>
           <span class="lp-hits">${r.correct}/${r.attempts}</span>
         </div>`;
 
-      box.innerHTML = `
-        <div class="score-circle ${cls}"><span>${acc}%</span><span class="score-circle-label">GLOBAL</span></div>
+      let html = '';
+      // 1) LA ACCIÓN, primero y prominente
+      if (s.weak.length) {
+        const n = s.weak.length;
+        html += `
+          <div class="prog-action-card">
+            <div class="prog-action-title">🎯 Necesitas practicar</div>
+            ${s.weak.slice(0, 6).map(r => row(r, 'weak')).join('')}
+            ${n > 6 ? `<div class="prog-more">…y ${n - 6} más</div>` : ''}
+            <button class="btn btn-primary prog-cta" onclick="${cfg.onPractice}">
+              ▶ Practicar ${n === 1 ? 'esta' : 'estas ' + n} →
+            </button>
+          </div>`;
+      } else {
+        html += `
+          <div class="prog-action-card prog-allgood">
+            <div class="prog-allgood-icon">🎉</div>
+            <div class="prog-action-title">¡Vas al día!</div>
+            <p>No tienes ${cfg.unit} por reforzar. Sigue practicando para mantenerlo así.</p>
+          </div>`;
+      }
+
+      // 2) Los números, secundarios
+      html += `
         <div class="lp-summary">
-          <div class="lp-card"><div class="lp-num" style="color:#a855f7">${s.practiced}</div><div class="lp-label">Practicadas</div></div>
-          <div class="lp-card"><div class="lp-num" style="color:#10b981">${s.strong.length}</div><div class="lp-label">Dominadas</div></div>
-          <div class="lp-card"><div class="lp-num" style="color:#f87171">${s.weak.length}</div><div class="lp-label">Por reforzar</div></div>
-        </div>
-        ${s.weak.length ? `
-          <div class="lp-section-title">🔴 Necesitas reforzar</div>
-          ${s.weak.slice(0, 20).map(r => rowHtml(r, 'weak')).join('')}
-          ${s.weak.length >= 4 ? `<button class="btn btn-primary" style="width:100%; justify-content:center; margin-top:0.8rem;" onclick="practiceWeakGrammar()">🎯 Practicar solo estas</button>` : ''}
-        ` : '<div class="lp-section-title">🎉 Sin preguntas por reforzar</div>'}
-        ${s.strong.length ? `
-          <div class="lp-section-title">🟢 Ya las dominas</div>
-          ${s.strong.slice(0, 20).map(r => rowHtml(r, 'strong')).join('')}
-        ` : ''}
-        <button class="btn btn-secondary" style="width:100%; justify-content:center; margin-top:1.25rem;" onclick="setGrammarMode('quiz')">🎯 Hacer otro quiz</button>`;
+          <div class="lp-card"><div class="lp-num" style="color:${accColor}">${acc}%</div><div class="lp-label">Precisión</div></div>
+          <div class="lp-card"><div class="lp-num" style="color:#10b981">${s.strong.length}</div><div class="lp-label">Dominados</div></div>
+          <div class="lp-card"><div class="lp-num" style="color:#a855f7">${s.practiced}</div><div class="lp-label">Practicados</div></div>
+        </div>`;
+
+      // 3) Los que ya dominas
+      if (s.strong.length) {
+        html += '<div class="lp-section-title">🟢 Ya los dominas</div>'
+          + s.strong.slice(0, 20).map(r => row(r, 'strong')).join('');
+      }
+
+      html += `<button class="btn btn-secondary" style="width:100%; justify-content:center; margin-top:1.25rem;" onclick="${cfg.onQuiz}">🎯 Hacer otro quiz</button>`;
+      box.innerHTML = html;
+    }
+
+    function renderGrammarStats() {
+      renderProgressPanel('grammar-stats', grammarStats(), {
+        dataReady: !!grammarData,
+        emptyMsg: 'Todavía no has practicado preguntas.<br>Ve a <b>🎯 Practicar</b> y haz tu primer quiz.',
+        unit: 'preguntas',
+        wordOf: r => r.topic.title,
+        subOf:  r => r.topic.title_es || '',
+        onPractice: 'practiceWeakGrammar()',
+        onQuiz: "setGrammarMode('quiz')",
+      });
     }
 
     // ── Verbos irregulares ────────────────────────────────────────
@@ -2297,44 +2325,15 @@
     function practiceWeakVerbs() { setVerbMode('quiz'); startVerbQuiz(true); }
 
     function renderVerbStats() {
-      const box = document.getElementById('verb-stats');
-      if (!currentUser) {
-        box.innerHTML = '<div class="no-data">🔐 Inicia sesión para guardar y ver tu progreso de verbos.</div>';
-        return;
-      }
-      if (!verbsData) { box.innerHTML = '<div class="no-data">Cargando...</div>'; return; }
-      const s = verbStats();
-      if (s.practiced === 0) {
-        box.innerHTML = '<div class="no-data">Todavía no has practicado verbos.<br>Ve a <b>🎯 Practicar</b> y haz tu primer quiz.</div>';
-        return;
-      }
-      const acc = s.totalAttempts ? Math.round(s.totalCorrect / s.totalAttempts * 100) : 0;
-      const cls = acc >= 80 ? 'score-circle-great' : acc >= 50 ? 'score-circle-good' : 'score-circle-try';
-      const rowHtml = (r, kind) => `
-        <div class="lp-row ${kind}">
-          <span class="lp-word">${r.verb.infinitive}</span>
-          <span class="lp-tr">${r.verb.past_simple} · ${r.verb.past_participle}</span>
-          <span class="lp-acc">${Math.round(r.acc * 100)}%</span>
-          <span class="lp-hits">${r.correct}/${r.attempts}</span>
-        </div>`;
-
-      box.innerHTML = `
-        <div class="score-circle ${cls}"><span>${acc}%</span><span class="score-circle-label">GLOBAL</span></div>
-        <div class="lp-summary">
-          <div class="lp-card"><div class="lp-num" style="color:#a855f7">${s.practiced}</div><div class="lp-label">Practicados</div></div>
-          <div class="lp-card"><div class="lp-num" style="color:#10b981">${s.strong.length}</div><div class="lp-label">Dominados</div></div>
-          <div class="lp-card"><div class="lp-num" style="color:#f87171">${s.weak.length}</div><div class="lp-label">Por reforzar</div></div>
-        </div>
-        ${s.weak.length ? `
-          <div class="lp-section-title">🔴 Necesitas reforzar</div>
-          ${s.weak.slice(0, 20).map(r => rowHtml(r, 'weak')).join('')}
-          ${s.weak.length >= 4 ? `<button class="btn btn-primary" style="width:100%; justify-content:center; margin-top:0.8rem;" onclick="practiceWeakVerbs()">🎯 Practicar solo estos</button>` : ''}
-        ` : '<div class="lp-section-title">🎉 Sin verbos por reforzar</div>'}
-        ${s.strong.length ? `
-          <div class="lp-section-title">🟢 Ya los dominas</div>
-          ${s.strong.slice(0, 20).map(r => rowHtml(r, 'strong')).join('')}
-        ` : ''}
-        <button class="btn btn-secondary" style="width:100%; justify-content:center; margin-top:1.25rem;" onclick="setVerbMode('quiz')">🎯 Hacer otro quiz</button>`;
+      renderProgressPanel('verb-stats', verbStats(), {
+        dataReady: !!verbsData,
+        emptyMsg: 'Todavía no has practicado verbos.<br>Ve a <b>🎯 Practicar</b> y haz tu primer quiz.',
+        unit: 'verbos',
+        wordOf: r => r.verb.infinitive,
+        subOf:  r => r.verb.past_simple + ' · ' + r.verb.past_participle,
+        onPractice: 'practiceWeakVerbs()',
+        onQuiz: "setVerbMode('quiz')",
+      });
     }
 
     // ── Conectores (linking words) ─────────────────────────────────
@@ -2781,49 +2780,15 @@
     }
 
     function renderLinkerStats() {
-      const box = document.getElementById('linker-stats');
-      if (!currentUser) {
-        box.innerHTML = '<div class="no-data">🔐 Inicia sesión para guardar y ver tu progreso de conectores.</div>';
-        return;
-      }
-      if (!linkersData) { box.innerHTML = '<div class="no-data">Cargando...</div>'; return; }
-
-      const s = linkerStats();
-      if (s.practiced === 0) {
-        box.innerHTML = '<div class="no-data">Todavía no has practicado conectores.<br>Ve a <b>🎯 Practicar</b> y haz tu primer quiz.</div>';
-        return;
-      }
-      const acc = s.totalAttempts ? Math.round(s.totalCorrect / s.totalAttempts * 100) : 0;
-      const cls = acc >= 80 ? 'score-circle-great' : acc >= 50 ? 'score-circle-good' : 'score-circle-try';
-
-      const rowHtml = (r, kind) => `
-        <div class="lp-row ${kind}">
-          <span class="lp-word">${r.linker.word}</span>
-          <span class="lp-tr">${r.linker.translation}</span>
-          <span class="lp-acc">${Math.round(r.acc * 100)}%</span>
-          <span class="lp-hits">${r.correct}/${r.attempts}</span>
-        </div>`;
-
-      box.innerHTML = `
-        <div class="score-circle ${cls}"><span>${acc}%</span><span class="score-circle-label">GLOBAL</span></div>
-        <div class="lp-summary">
-          <div class="lp-card"><div class="lp-num" style="color:#a855f7">${s.practiced}</div><div class="lp-label">Practicados</div></div>
-          <div class="lp-card"><div class="lp-num" style="color:#10b981">${s.strong.length}</div><div class="lp-label">Dominados</div></div>
-          <div class="lp-card"><div class="lp-num" style="color:#f87171">${s.weak.length}</div><div class="lp-label">Por reforzar</div></div>
-        </div>
-
-        ${s.weak.length ? `
-          <div class="lp-section-title">🔴 Necesitas reforzar</div>
-          ${s.weak.slice(0, 20).map(r => rowHtml(r, 'weak')).join('')}
-          ${s.weak.length >= 4 ? `<button class="btn btn-primary" style="width:100%; justify-content:center; margin-top:0.8rem;" onclick="practiceWeak()">🎯 Practicar solo estos</button>` : ''}
-        ` : '<div class="lp-section-title">🎉 Sin conectores por reforzar</div>'}
-
-        ${s.strong.length ? `
-          <div class="lp-section-title">🟢 Ya los dominas</div>
-          ${s.strong.slice(0, 20).map(r => rowHtml(r, 'strong')).join('')}
-        ` : ''}
-
-        <button class="btn btn-secondary" style="width:100%; justify-content:center; margin-top:1.25rem;" onclick="setLinkerMode('quiz')">🎯 Hacer otro quiz</button>`;
+      renderProgressPanel('linker-stats', linkerStats(), {
+        dataReady: !!linkersData,
+        emptyMsg: 'Todavía no has practicado conectores.<br>Ve a <b>🎯 Practicar</b> y haz tu primer quiz.',
+        unit: 'conectores',
+        wordOf: r => r.linker.word,
+        subOf:  r => r.linker.translation,
+        onPractice: 'practiceWeak()',
+        onQuiz: "setLinkerMode('quiz')",
+      });
     }
 
     function toggleAuthMode() {
