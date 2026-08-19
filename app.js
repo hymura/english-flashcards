@@ -2918,11 +2918,33 @@
       document.getElementById('flashcard').classList.remove('flipped');
       hidePronunPanel();
       reflectMastered(p.id);
-      const pct = Math.round(((index + 1) / phrases.length) * 100);
-      document.getElementById('progress-text').textContent = `Card ${index + 1} of ${phrases.length}`;
-      document.getElementById('progress-pct').textContent  = pct + '%';
-      document.getElementById('progress-fill').style.width = pct + '%';
+      updateCardProgress();
       updateStats();
+    }
+
+    // Barra = meta diaria (motivante); subtexto = acumulado real
+    function updateCardProgress() {
+      const done = studiedTodayIds.size;
+      const goal = DAILY_GOAL;
+      const pct  = Math.min(100, Math.round(done / goal * 100));
+      const met  = done >= goal;
+      const fill = document.getElementById('progress-fill');
+      document.getElementById('progress-text').textContent = met ? '✓ ¡Meta de hoy cumplida!' : '🎯 Meta de hoy';
+      document.getElementById('progress-pct').textContent  = done + ' / ' + goal;
+      fill.style.width = pct + '%';
+      fill.classList.toggle('met', met);
+
+      // Acumulado del banco completo
+      let mastered = 0;
+      allPhrases.forEach(p => { if (progressMap.get(p.id)?.status === 'mastered') mastered++; });
+      const total = allPhrases.length || 1;
+      const mpct = Math.round(mastered / total * 100);
+      const sub = document.getElementById('progress-sub');
+      if (sub) {
+        sub.innerHTML = `<span class="prog-sub-strong">${mastered}</span> de ${total} dominadas`
+          + ` <span class="prog-sub-mini">(${mpct}% del banco)</span>`
+          + `  ·  tarjeta ${current + 1}`;
+      }
     }
 
     // Refleja en la UI si la frase actual está dominada
@@ -2959,7 +2981,10 @@
       const card = document.getElementById('flashcard');
       card.classList.toggle('flipped');
       // Al revelar la traducción cuenta como "estudiar" esa frase
-      if (card.classList.contains('flipped') && phrases[current]) markPhraseStudied(phrases[current].id);
+      if (card.classList.contains('flipped') && phrases[current]) {
+        markPhraseStudied(phrases[current].id);
+        updateCardProgress();
+      }
     }
     function nextCard()  { if (current < phrases.length - 1) showCard(current + 1); else { document.getElementById('main-content').classList.add('hidden'); document.getElementById('completed').classList.remove('hidden'); } }
     function prevCard()  { if (current > 0) showCard(current - 1); }

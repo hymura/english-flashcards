@@ -196,8 +196,13 @@
     /* Progress */
     .progress-container { width: 100%; max-width: 560px; margin-bottom: 1.5rem; }
     .progress-info { display: flex; justify-content: space-between; font-size: 0.85rem; color: var(--text-muted); margin-bottom: 0.5rem; }
-    .progress-bar { height: 6px; background: var(--border); border-radius: 99px; overflow: hidden; }
-    .progress-fill { height: 100%; background: linear-gradient(90deg, #7c3aed, #a855f7); border-radius: 99px; transition: width 0.5s ease; }
+    .progress-info span:last-child { color: var(--text); font-weight: 700; }
+    .progress-bar { height: 8px; background: var(--border); border-radius: 99px; overflow: hidden; }
+    .progress-fill { height: 100%; background: linear-gradient(90deg, #22d3ee, #0ea5e9); border-radius: 99px; transition: width 0.5s ease; }
+    .progress-fill.met { background: linear-gradient(90deg, #10b981, #34d399); }
+    .progress-sub { margin-top: 0.45rem; font-size: 0.75rem; color: var(--text-muted); text-align: center; }
+    .prog-sub-strong { color: #10b981; font-weight: 800; }
+    .prog-sub-mini { opacity: 0.75; }
 
     /* Card scene */
     .scene { width: 100%; max-width: 560px; height: 300px; perspective: 1000px; margin-bottom: 1.5rem; }
