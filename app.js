@@ -1552,8 +1552,9 @@
       if (name === 'lab')     loadLab();
       if (name === 'chat')    loadChat();
       if (name === 'dict')    setTimeout(() => document.getElementById('dict-input').focus(), 100);
-      // El "+" flotante estorba donde ya hay caja de texto abajo
-      document.getElementById('fab-add').classList.toggle('hidden', !currentUser || name === 'chat' || name === 'dict');
+      // El "+" (agregar frase) solo donde las frases son relevantes
+      const fabViews = ['today', 'flashcards', 'shadow'];
+      document.getElementById('fab-add').classList.toggle('hidden', !currentUser || !fabViews.includes(name));
       window.scrollTo({ top: 0, behavior: 'smooth' });
     }
 
