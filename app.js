@@ -2056,6 +2056,14 @@
     // ── Verbos irregulares ────────────────────────────────────────
     let verbsData = null;
 
+    let activeVerbType = 'all';
+    const VERB_TYPES = [
+      ['all', 'Todos'], ['AAA', 'A-A-A'], ['ABA', 'A-B-A'], ['ABB', 'A-B-B'], ['ABC', 'A-B-C']
+    ];
+    const VERB_TYPE_DESC = {
+      AAA: 'invariables', ABA: 'base = participio', ABB: 'pasado = participio', ABC: 'las 3 distintas'
+    };
+
     async function loadVerbs() {
       if (verbsData) return;
       const { data, error } = await sb.from('irregular_verbs').select('*').order('sort_order');
@@ -2066,35 +2074,60 @@
       }
       verbsData = data || [];
       await loadVerbProgress();
+      buildVerbTypePills();
+      renderVerbs();
+    }
+
+    function buildVerbTypePills() {
+      const el = document.getElementById('verb-types');
+      if (!el) return;
+      el.innerHTML = VERB_TYPES.map(([t, label]) => {
+        const n = t === 'all' ? verbsData.length : verbsData.filter(v => v.pattern_type === t).length;
+        return `<div class="cat-chip ${activeVerbType === t ? 'active' : ''}" data-vt="${t}" onclick="filterVerbType('${t}', this)"
+                  ${t !== 'all' ? `title="${VERB_TYPE_DESC[t] || ''}"` : ''}>${label} <span class="cat-count">${n}</span></div>`;
+      }).join('');
+    }
+
+    function filterVerbType(t, el) {
+      activeVerbType = t;
+      document.querySelectorAll('#verb-types .cat-chip').forEach(c => c.classList.remove('active'));
+      if (el) el.classList.add('active');
       renderVerbs();
     }
 
     function renderVerbs() {
       if (!verbsData) return;
       const q = (document.getElementById('verb-search').value || '').toLowerCase().trim();
-      const list = q
-        ? verbsData.filter(v =>
-            v.infinitive.toLowerCase().includes(q) ||
-            v.past_simple.toLowerCase().includes(q) ||
-            v.past_participle.toLowerCase().includes(q) ||
-            v.translation.toLowerCase().includes(q))
-        : verbsData;
+      let list = verbsData;
+      if (activeVerbType !== 'all') list = list.filter(v => v.pattern_type === activeVerbType);
+      if (q) list = list.filter(v =>
+        v.infinitive.toLowerCase().includes(q) ||
+        v.past_simple.toLowerCase().includes(q) ||
+        v.past_participle.toLowerCase().includes(q) ||
+        (v.translation || '').toLowerCase().includes(q));
+
       document.getElementById('verb-count').textContent = `${list.length} verbo${list.length === 1 ? '' : 's'}`;
-      document.getElementById('verb-table').innerHTML = list.map(v => {
-        const say = `${v.infinitive}, ${v.past_simple.replace(/\s*\/\s*/g,' or ')}, ${v.past_participle.replace(/\s*\/\s*/g,' or ')}`.replace(/'/g,"\\'");
-        return `
+
+      const ipa = t => t ? `<small class="vf-ipa">${t}</small>` : '';
+      let html = '', lastPattern = ' ';
+      list.forEach(v => {
+        const pat = v.pattern || 'Sin clasificar';
+        if (pat !== lastPattern) { html += `<div class="verb-pattern-title">${pat}</div>`; lastPattern = pat; }
+        const say = `${v.infinitive}, ${v.past_simple.replace(/\s*\/\s*/g, ' or ')}, ${v.past_participle.replace(/\s*\/\s*/g, ' or ')}`.replace(/'/g, "\\'");
+        html += `
           <div class="verb-row">
             <div class="verb-forms">
-              <span class="vf base">${v.infinitive}</span>
-              <span class="vf">${v.past_simple}</span>
-              <span class="vf">${v.past_participle}</span>
+              <span class="vf base">${v.infinitive}${ipa(v.ipa_inf)}</span>
+              <span class="vf">${v.past_simple}${ipa(v.ipa_past)}</span>
+              <span class="vf">${v.past_participle}${ipa(v.ipa_part)}</span>
             </div>
             <div class="verb-tr">${v.translation}</div>
             <button class="verb-audio" onclick="speakEnglish('${say}', this)" title="Escuchar">
               <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M15.54 8.46a5 5 0 0 1 0 7.07"/></svg>
             </button>
           </div>`;
-      }).join('') || '<div class="no-data">No se encontraron verbos.</div>';
+      });
+      document.getElementById('verb-table').innerHTML = html || '<div class="no-data">No se encontraron verbos.</div>';
     }
 
     // ╔══════════════════════════════════════════════════════════╗

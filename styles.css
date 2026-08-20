@@ -718,9 +718,14 @@
       background: #13132b; border: 1px solid var(--border); border-radius: 12px;
       padding: 0.8rem 1rem; margin-bottom: 0.55rem;
     }
-    .verb-forms { display: flex; flex: 1.4; gap: 0.4rem; min-width: 0; flex-wrap: wrap; }
-    .vf { font-size: 0.85rem; color: #e2e8f0; flex: 1; min-width: 70px; }
+    .verb-forms { display: flex; flex: 1.5; gap: 0.4rem; min-width: 0; flex-wrap: wrap; }
+    .vf { display: flex; flex-direction: column; gap: 0.05rem; font-size: 0.88rem; color: #e2e8f0; flex: 1; min-width: 72px; }
     .vf.base { font-weight: 700; color: #a855f7; }
+    .vf-ipa { font-size: 0.68rem; color: #22d3ee; font-weight: 500; font-family: 'Cambria', Georgia, serif; }
+    .verb-pattern-title {
+      font-size: 0.72rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase;
+      color: #a855f7; margin: 1.4rem 0 0.7rem; line-height: 1.4;
+    }
     .verb-tr { flex: 1; font-size: 0.82rem; color: var(--text-muted); min-width: 90px; }
     .verb-audio {
       background: rgba(251,191,36,0.12); color: #fbbf24; border: 1px solid rgba(251,191,36,0.3);
