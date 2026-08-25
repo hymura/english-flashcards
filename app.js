@@ -26,6 +26,9 @@
     const LC_ALLOW = [
       'eb4f49c3-bf27-4199-8650-e0e68da95d01',   // (Alex) cuenta de prueba — única habilitada
     ];
+    // Producción general: true = Core ON para TODO usuario autenticado (fail-closed).
+    // false = solo LC_ALLOW (canary/rollback). Único interruptor de expansión.
+    const LC_GLOBAL = true;
     const LC = {
       // _force: false = kill switch total (OFF siempre). Por defecto null: manda la
       // allowlist. NO existe forzar-ON: la única vía de ON es estar en LC_ALLOW (fail-closed).
@@ -33,6 +36,7 @@
       get enabled() {
         if (this._force === false) return false;                             // kill switch total
         if (!currentUser || !currentUser.id) return false;                   // no autenticado
+        if (LC_GLOBAL) return true;                                          // producción general (solo autenticados llegan aquí)
         if (!Array.isArray(LC_ALLOW) || LC_ALLOW.length === 0) return false;  // allowlist vacía/ausente
         return LC_ALLOW.includes(currentUser.id);                            // ON solo si incluido
       },
