@@ -14,6 +14,73 @@
     let progressMap = new Map();  // phrase_id -> { status, best_score, attempts }
 
     // ╔══════════════════════════════════════════════════════════╗
+    // ║  LEARNING CORE · dual-write (DESACTIVADO por defecto)     ║
+    // ╚══════════════════════════════════════════════════════════╝
+    // Kill switch nivel 1: con LC.enabled=false el Core no se toca y la app
+    // funciona EXACTAMENTE igual que hoy. El dual-write es best-effort: va
+    // detrás del flag, envuelto en try/catch, y nunca bloquea el flujo del quiz.
+    // Flip a true SOLO cuando el esquema del Learning Core esté migrado (Fase 1).
+    // Allowlist Fase 2 (fail-closed): SOLO estos UUID (= currentUser.id / auth.uid())
+    // activan el Core. Vacía = nadie. Cualquier otro usuario: OFF. Temporal para la
+    // prueba controlada; en go-live se sustituye por activación global.
+    const LC_ALLOW = [
+      'eb4f49c3-bf27-4199-8650-e0e68da95d01',   // (Alex) cuenta de prueba — única habilitada
+    ];
+    const LC = {
+      // _force: false = kill switch total (OFF siempre). Por defecto null: manda la
+      // allowlist. NO existe forzar-ON: la única vía de ON es estar en LC_ALLOW (fail-closed).
+      _force: null,
+      get enabled() {
+        if (this._force === false) return false;                             // kill switch total
+        if (!currentUser || !currentUser.id) return false;                   // no autenticado
+        if (!Array.isArray(LC_ALLOW) || LC_ALLOW.length === 0) return false;  // allowlist vacía/ausente
+        return LC_ALLOW.includes(currentUser.id);                            // ON solo si incluido
+      },
+      async submitAttempt(exerciseId, opts = {}) {
+        if (!this.enabled || !currentUser || exerciseId == null) return;
+        const { response = null, isCorrect = null, score = null,
+                errorType = null, latencyMs = null, evidence = null } = opts;
+        const { error } = await sb.rpc('rpc_lc_submit_attempt', {
+          p_exercise_id: exerciseId, p_response: response, p_is_correct: isCorrect,
+          p_score: score, p_error_type: errorType, p_latency_ms: latencyMs, p_evidence: evidence
+        });
+        if (error) console.warn('LC.submitAttempt:', error.message);
+      },
+      // ── Fase 2 · evidence-only explícito ──────────────────────────
+      // NO usa rpc_lc_submit_attempt con exercise_id=null. Requiere items ya
+      // resueltos = [{conceptId, skillId, outcome}]. Sin items válidos → no-op.
+      // Escribe vía rpc_lc_record_evidence (RPC nueva; su SQL está pendiente de aprobación).
+      async recordEvidence(items) {
+        if (!this.enabled || !currentUser) return;
+        if (!Array.isArray(items) || items.length === 0) return;
+        const payload = items
+          .filter(i => i && i.conceptId != null && i.skillId != null && i.outcome)
+          .map(i => ({ concept_id: i.conceptId, skill_id: i.skillId, outcome: i.outcome }));
+        if (payload.length === 0) return;
+        const { error } = await sb.rpc('rpc_lc_record_evidence', { p_evidence: payload });
+        if (error) console.warn('LC.recordEvidence:', error.message);
+      },
+      // Resuelve pregunta→concepto(s) (lc_content_concept) + modo→skill (q.type) y registra evidencia.
+      async submitFromQuestion(questionId, correct, quizType) {
+        if (!this.enabled || !currentUser || questionId == null) return;
+        const skillCode = ({ aux: 'recognize', match: 'recognize', speak: 'produce' })[quizType] || 'recognize';
+        const { data: sk, error: eSk } = await sb.from('lc_skill')
+          .select('id').eq('code', skillCode).single();
+        if (eSk || !sk) { console.warn('LC.submitFromQuestion skill:', skillCode, eSk && eSk.message); return; }
+        const { data: links, error: eCc } = await sb.from('lc_content_concept')
+          .select('concept_id').eq('content_type', 'question').eq('content_id', questionId);
+        if (eCc) { console.warn('LC.submitFromQuestion lookup:', eCc.message); return; }
+        if (!links || links.length === 0) {
+          console.info('LC: pregunta ' + questionId + ' sin mapping U8 → no-op (sin evidencia)');
+          return;
+        }
+        const outcome = correct ? 'pass' : 'fail';
+        await this.recordEvidence(links.map(l => ({ conceptId: l.concept_id, skillId: sk.id, outcome })));
+      }
+    };
+    window.LC = LC;   // expuesto para depuración y kill switch: LC._force = false (apaga todo)
+
+    // ╔══════════════════════════════════════════════════════════╗
     // ║  SRS · Repetición espaciada                              ║
     // ╚══════════════════════════════════════════════════════════╝
     const SRS_LADDER = [1, 3, 7, 21, 60, 120, 240];   // días por "box"
@@ -1841,6 +1908,14 @@
       else gquizMissed.push(t);
       saveGrammarAnswer(t.id, correct);
       scheduleSrs('question', t.id, correct ? 'good' : 'again');
+      // ── Learning Core · dual-write (Fase 2) ──────────────────────
+      // Legacy (arriba) ya escribió y es autoritativo. El Core es best-effort:
+      // solo si LC.enabled, fire-and-forget (no bloquea la UI), y cualquier
+      // error queda aislado en .catch (nunca rompe el flujo legacy).
+      if (LC.enabled) {
+        LC.submitFromQuestion(t.id, correct, q.type)
+          .catch(e => console.warn('LC dual-write (gramática):', e));
+      }
 
       const fb = document.getElementById('gquiz-feedback');
       fb.className = 'quiz-feedback ' + (correct ? 'good' : 'bad');
@@ -2171,6 +2246,17 @@
       verbProgress.set(verbId, { attempts: row.attempts, correct: row.correct, last_result: wasCorrect });
       const { error } = await sb.from('verb_progress').upsert(row, { onConflict: 'user_id,verb_id' });
       if (error) console.warn('saveVerbAnswer:', error.message);
+
+      // ── Learning Core · dual-write mínimo (Fase 1) ────────────────
+      // La escritura de verb_progress de arriba es AUTORITATIVA y ya ocurrió.
+      // Esto es aditivo y best-effort: sólo corre si LC.enabled y si el verbo
+      // está mapeado a un ejercicio del Core (mapeo real llega en Fase 2/3).
+      if (LC.enabled) {
+        try {
+          const exId = (window.LC_verbExercise || {})[verbId];   // verbo → ejercicio del Core
+          if (exId != null) await LC.submitAttempt(exId, { isCorrect: wasCorrect });
+        } catch (e) { console.warn('LC dual-write (verbos):', e); }
+      }
     }
 
     function verbStats() {
