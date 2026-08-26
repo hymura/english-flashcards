@@ -80,6 +80,17 @@
         }
         const outcome = correct ? 'pass' : 'fail';
         await this.recordEvidence(links.map(l => ({ conceptId: l.concept_id, skillId: sk.id, outcome })));
+      },
+      async submitFromPhrase(phraseId, outcome, skillCode) {
+        if (!this.enabled || !currentUser || phraseId == null) return;
+        const { data: sk, error: eSk } = await sb.from('lc_skill')
+          .select('id').eq('code', skillCode).single();
+        if (eSk || !sk) { console.warn('LC.submitFromPhrase skill:', skillCode, eSk && eSk.message); return; }
+        const { data: links, error: eCc } = await sb.from('lc_content_concept')
+          .select('concept_id').eq('content_type', 'phrase').eq('content_id', phraseId);
+        if (eCc) { console.warn('LC.submitFromPhrase lookup:', eCc.message); return; }
+        if (!links || links.length === 0) return;
+        await this.recordEvidence(links.map(l => ({ conceptId: l.concept_id, skillId: sk.id, outcome })));
       }
     };
     window.LC = LC;   // expuesto para depuración y kill switch: LC._force = false (apaga todo)
@@ -2710,6 +2721,10 @@
       if (p && currentUser) {
         markPhraseStudied(p.id);
         scheduleSrs('phrase', p.id, score.pct >= 95 ? 'easy' : score.pct >= 70 ? 'good' : 'again');
+        if (LC.enabled) {
+          LC.submitFromPhrase(p.id, score.pct >= 70 ? 'pass' : 'fail', 'produce')
+            .catch(function(e) { console.warn('LC phrase shadow:', e.message); });
+        }
       }
     }
 
@@ -3051,6 +3066,10 @@
         saveProgress(p.id, { status }).then(() => { reflectMastered(p.id); updateStats(); });
         scheduleSrs('phrase', p.id, quality);
         markPhraseStudied(p.id);
+        if (LC.enabled) {
+          LC.submitFromPhrase(p.id, quality !== 'again' ? 'pass' : 'fail', 'recognize')
+            .catch(function(e) { console.warn('LC phrase rate:', e.message); });
+        }
       }
       nextCard();
     }
