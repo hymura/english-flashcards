@@ -1327,4 +1327,67 @@
       border-color: transparent; color: #fff;
       box-shadow: 0 4px 14px rgba(168, 85, 247, 0.35);
     }
+
+    /* ── Onboarding LC (primer login) ── */
+    .lc-onb {
+      position: fixed; inset: 0; z-index: 10000;
+      background: rgba(11, 12, 22, 0.85); backdrop-filter: blur(6px);
+      display: flex; align-items: center; justify-content: center;
+      padding: 1rem;
+      animation: lcOnbFade 0.25s ease;
+    }
+    .lc-onb[hidden] { display: none; }
+    @keyframes lcOnbFade { from { opacity: 0; } to { opacity: 1; } }
+    .lc-onb-card {
+      position: relative; width: 100%; max-width: 460px;
+      background: linear-gradient(160deg, #191b2c, #12142a);
+      border: 1px solid var(--border); border-radius: 20px;
+      padding: 2rem 1.75rem 1.5rem; color: var(--text);
+      box-shadow: 0 20px 60px rgba(0,0,0,0.5);
+      max-height: calc(100vh - 2rem); overflow-y: auto;
+    }
+    .lc-onb-close {
+      position: absolute; top: 0.75rem; right: 0.85rem;
+      background: none; border: none; color: var(--text-muted);
+      font-size: 1.5rem; line-height: 1; cursor: pointer; padding: 0.25rem 0.5rem;
+      border-radius: 6px;
+    }
+    .lc-onb-close:hover { color: var(--text); background: rgba(255,255,255,0.06); }
+    .lc-onb-dots {
+      display: flex; gap: 0.4rem; justify-content: center; margin-bottom: 1.25rem;
+    }
+    .lc-onb-dot {
+      width: 7px; height: 7px; border-radius: 50%;
+      background: rgba(255,255,255,0.15); transition: background 0.2s, width 0.2s;
+    }
+    .lc-onb-dot.on { background: #a855f7; width: 22px; border-radius: 99px; }
+    .lc-onb-body h2 {
+      font-size: 1.4rem; font-weight: 800; margin: 0 0 0.5rem;
+      background: linear-gradient(90deg, #a855f7, #22d3ee);
+      -webkit-background-clip: text; background-clip: text; color: transparent;
+    }
+    .lc-onb-body p { color: var(--text-muted); font-size: 0.92rem; line-height: 1.55; margin: 0.35rem 0; }
+    .lc-onb-body strong { color: var(--text); }
+    .lc-onb-list { display: flex; flex-direction: column; gap: 0.55rem; margin: 1rem 0 0.5rem; }
+    .lc-onb-item {
+      display: flex; align-items: center; gap: 0.75rem;
+      background: rgba(255,255,255,0.03); border: 1px solid var(--border);
+      border-radius: 12px; padding: 0.65rem 0.85rem;
+    }
+    .lc-onb-item-icon { font-size: 1.3rem; flex-shrink: 0; }
+    .lc-onb-item-text { font-size: 0.85rem; color: var(--text); }
+    .lc-onb-chips { display: flex; flex-wrap: wrap; gap: 0.35rem; margin-top: 0.85rem; }
+    .lc-onb-chip {
+      font-size: 0.72rem; padding: 0.25rem 0.6rem; border-radius: 99px;
+      background: rgba(168, 85, 247, 0.12); border: 1px solid rgba(168, 85, 247, 0.35);
+      color: #e0d7f7;
+    }
+    .lc-onb-actions { margin-top: 1.5rem; }
+    .lc-onb-btn {
+      width: 100%; padding: 0.85rem; border: none; border-radius: 12px;
+      background: linear-gradient(135deg, #7c3aed, #a855f7); color: #fff;
+      font-size: 0.95rem; font-weight: 700; cursor: pointer;
+      transition: transform 0.15s, box-shadow 0.2s;
+    }
+    .lc-onb-btn:hover { transform: translateY(-1px); box-shadow: 0 8px 24px rgba(168,85,247,0.4); }
   

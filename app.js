@@ -446,6 +446,92 @@
         '<span class="lc-mini-bar"><span class="lc-mini-fill" style="width:' + pct + '%"></span></span>';
     }
 
+    // ── Onboarding LC · 3 slides al primer login autenticado ──────────────
+    // Se dispara desde loadAppData tras refreshCoreData. Se marca localStorage
+    // al ABRIR (más robusto si el user cierra la pestaña sin terminar).
+    let _lcOnboardingSlide = 0;
+    const LC_ONBOARDING_KEY = 'lc_onboarding_seen';
+
+    function maybeShowLCOnboarding() {
+      if (!LC.enabled) return;
+      try {
+        if (localStorage.getItem(LC_ONBOARDING_KEY)) return; // ya visto
+      } catch (e) { /* localStorage no disponible: mostrar de todas formas */ }
+      // Fallback anti-cache-clear: si el user ya tiene mastery hidratado (>0 celdas),
+      // no es un usuario nuevo — no molestar.
+      if (LC.mastery && LC.mastery.size > 0) {
+        try { localStorage.setItem(LC_ONBOARDING_KEY, '1'); } catch (e) {}
+        return;
+      }
+      showLCOnboarding();
+    }
+
+    function showLCOnboarding() {
+      try { localStorage.setItem(LC_ONBOARDING_KEY, '1'); } catch (e) {}
+      _lcOnboardingSlide = 0;
+      const overlay = document.getElementById('lc-onboarding');
+      if (!overlay) return;
+      overlay.hidden = false;
+      renderLCOnboardingSlide();
+    }
+
+    function renderLCOnboardingSlide() {
+      const body = document.getElementById('lc-onb-body');
+      const dots = document.getElementById('lc-onb-dots');
+      const next = document.getElementById('lc-onb-next');
+      if (!body || !dots || !next) return;
+      const chips = LC_U8_IDS.map(cid => `<span class="lc-onb-chip">${escapeHtml(LC_SHORT_NAMES[cid])}</span>`).join('');
+      const slides = [
+        {
+          html:
+            '<h2>¡Bienvenido!</h2>' +
+            '<p>Tu curso: <strong>Presente simple</strong> · Unidad 8</p>' +
+            '<p>Vas a aprender estos 7 conceptos:</p>' +
+            '<div class="lc-onb-chips">' + chips + '</div>',
+          btn: 'Siguiente →'
+        },
+        {
+          html:
+            '<h2>Todo suma</h2>' +
+            '<p>Cada actividad que hagas actualiza tu progreso automáticamente:</p>' +
+            '<div class="lc-onb-list">' +
+              '<div class="lc-onb-item"><span class="lc-onb-item-icon">🃏</span><span class="lc-onb-item-text">Rate tarjetas (<strong>Reconocer</strong>)</span></div>' +
+              '<div class="lc-onb-item"><span class="lc-onb-item-icon">🎤</span><span class="lc-onb-item-text">Practica shadowing (<strong>Producir</strong>)</span></div>' +
+              '<div class="lc-onb-item"><span class="lc-onb-item-icon">🎯</span><span class="lc-onb-item-text">Responde preguntas de gramática</span></div>' +
+            '</div>',
+          btn: 'Siguiente →'
+        },
+        {
+          html:
+            '<h2>Empieza aquí</h2>' +
+            '<p>En <strong>Inicio</strong> verás siempre:</p>' +
+            '<div class="lc-onb-list">' +
+              '<div class="lc-onb-item"><span class="lc-onb-item-icon">📖</span><span class="lc-onb-item-text"><strong>Tu curso</strong> con qué conceptos dominas</span></div>' +
+              '<div class="lc-onb-item"><span class="lc-onb-item-icon">✨</span><span class="lc-onb-item-text"><strong>Practica esto</strong> con la mejor sugerencia para hoy</span></div>' +
+            '</div>',
+          btn: '¡Empezar!'
+        }
+      ];
+      const s = slides[_lcOnboardingSlide];
+      body.innerHTML = s.html;
+      next.textContent = s.btn;
+      dots.innerHTML = slides.map((_, i) => `<span class="lc-onb-dot${i === _lcOnboardingSlide ? ' on' : ''}"></span>`).join('');
+    }
+
+    function nextLCOnboarding() {
+      if (_lcOnboardingSlide < 2) {
+        _lcOnboardingSlide++;
+        renderLCOnboardingSlide();
+      } else {
+        dismissLCOnboarding();
+      }
+    }
+
+    function dismissLCOnboarding() {
+      const overlay = document.getElementById('lc-onboarding');
+      if (overlay) overlay.hidden = true;
+    }
+
     // Learning Core · dispatcher del botón "Practicar" de la recomendación
     // Usa LC.recommendation pre-computado por LC.pickRecommendation() en refreshCoreData.
     async function practiceRecommendation() {
@@ -1789,6 +1875,7 @@
         if (LC.enabled) {
           await LC.refreshCoreData().catch(e => console.warn('LC.refreshCoreData:', e));
           renderSidebarLCProgress();
+          maybeShowLCOnboarding();
         }
         document.getElementById('loading').classList.add('hidden');
         loadCategories();
