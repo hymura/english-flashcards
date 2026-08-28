@@ -91,6 +91,38 @@
         if (eCc) { console.warn('LC.submitFromPhrase lookup:', eCc.message); return; }
         if (!links || links.length === 0) return;
         await this.recordEvidence(links.map(l => ({ conceptId: l.concept_id, skillId: sk.id, outcome })));
+      },
+      // ── MVP progress · loaders read-only ──────────────────────────
+      // Estado en memoria; se re-hidrata al arrancar la sesión y tras writes LC.
+      mastery: new Map(),        // "cid:sid" -> {state, score, decayed_score, confidence}
+      weakness: [],              // top-N conceptos débiles [{concept_id, skill_id, priority}]
+      conceptNames: new Map(),   // cid -> {code, name}
+      async loadConceptNames() {
+        if (this.conceptNames.size > 0) return;
+        const { data, error } = await sb.from('lc_concept').select('id, code, name');
+        if (error) { console.warn('LC.loadConceptNames:', error.message); return; }
+        (data || []).forEach(c => this.conceptNames.set(c.id, { code: c.code, name: c.name }));
+      },
+      async loadMastery() {
+        if (!this.enabled) return;
+        const { data, error } = await sb.from('v_lc_mastery')
+          .select('concept_id, skill_id, state, score, decayed_score, confidence');
+        if (error) { console.warn('LC.loadMastery:', error.message); return; }
+        this.mastery = new Map();
+        (data || []).forEach(r => this.mastery.set(r.concept_id + ':' + r.skill_id, {
+          state: r.state, score: r.score, decayed_score: r.decayed_score, confidence: r.confidence
+        }));
+      },
+      async loadWeakness() {
+        if (!this.enabled) return;
+        const { data, error } = await sb.from('v_lc_weakness')
+          .select('concept_id, skill_id, priority').limit(5);
+        if (error) { console.warn('LC.loadWeakness:', error.message); return; }
+        this.weakness = data || [];
+      },
+      async refreshCoreData() {
+        if (!this.enabled) return;
+        await Promise.all([this.loadConceptNames(), this.loadMastery(), this.loadWeakness()]);
       }
     };
     window.LC = LC;   // expuesto para depuración y kill switch: LC._force = false (apaga todo)
@@ -1526,6 +1558,8 @@
         await loadProgress();
         await loadStreak();
         await loadSrs();
+        // Learning Core · MVP progress: hidratar mastery/weakness al arrancar la sesión
+        if (LC.enabled) await LC.refreshCoreData().catch(e => console.warn('LC.refreshCoreData:', e));
         document.getElementById('loading').classList.add('hidden');
         loadCategories();
         loadPhrases();
