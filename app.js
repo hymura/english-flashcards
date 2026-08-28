@@ -2064,6 +2064,7 @@
       // error queda aislado en .catch (nunca rompe el flujo legacy).
       if (LC.enabled) {
         LC.submitFromQuestion(t.id, correct, q.type)
+          .then(() => LC.refreshCoreData())
           .catch(e => console.warn('LC dual-write (gramática):', e));
       }
 
@@ -2858,6 +2859,7 @@
         scheduleSrs('phrase', p.id, score.pct >= 95 ? 'easy' : score.pct >= 70 ? 'good' : 'again');
         if (LC.enabled) {
           LC.submitFromPhrase(p.id, score.pct >= 70 ? 'pass' : 'fail', 'produce')
+            .then(function() { return LC.refreshCoreData(); })
             .catch(function(e) { console.warn('LC phrase shadow:', e.message); });
         }
       }
@@ -3203,6 +3205,7 @@
         markPhraseStudied(p.id);
         if (LC.enabled) {
           LC.submitFromPhrase(p.id, quality !== 'again' ? 'pass' : 'fail', 'recognize')
+            .then(function() { return LC.refreshCoreData(); })
             .catch(function(e) { console.warn('LC phrase rate:', e.message); });
         }
       }
