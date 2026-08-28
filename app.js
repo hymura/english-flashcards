@@ -411,6 +411,7 @@
       const pre = new Map();
       for (const [key, m] of LC.mastery.entries()) pre.set(key, m.state);
       await LC.refreshCoreData();
+      renderSidebarLCProgress();
       for (const cid of LC_U8_IDS) {
         // Comparamos por celda concept:skill que ya existía o que apareció ahora.
         for (const [key, m] of LC.mastery.entries()) {
@@ -425,6 +426,23 @@
           return; // solo 1 toast por evento
         }
       }
+    }
+
+    // Sidebar: N/7 conceptos dominados + mini-bar. Solo si LC.enabled y datos hidratados.
+    function renderSidebarLCProgress() {
+      const el = document.getElementById('sidebar-lc-progress');
+      if (!el) return;
+      if (!LC.enabled || LC.conceptNames.size === 0) {
+        el.classList.remove('on');
+        el.innerHTML = '';
+        return;
+      }
+      const mastered = LC_U8_IDS.filter(cid => LC.conceptStateAggregate(cid) === 'mastered').length;
+      const pct = Math.round((mastered / LC_U8_IDS.length) * 100);
+      el.classList.add('on');
+      el.innerHTML =
+        '<span class="lc-mini-num">' + mastered + '/' + LC_U8_IDS.length + '</span>' +
+        '<span class="lc-mini-bar"><span class="lc-mini-fill" style="width:' + pct + '%"></span></span>';
     }
 
     // Learning Core · dispatcher del botón "Practicar" de la recomendación
@@ -1729,7 +1747,10 @@
         await loadStreak();
         await loadSrs();
         // Learning Core · MVP progress: hidratar mastery/weakness al arrancar la sesión
-        if (LC.enabled) await LC.refreshCoreData().catch(e => console.warn('LC.refreshCoreData:', e));
+        if (LC.enabled) {
+          await LC.refreshCoreData().catch(e => console.warn('LC.refreshCoreData:', e));
+          renderSidebarLCProgress();
+        }
         document.getElementById('loading').classList.add('hidden');
         loadCategories();
         loadPhrases();

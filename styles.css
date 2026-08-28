@@ -1288,4 +1288,22 @@
     @media (prefers-reduced-motion: reduce) {
       .lc-toast { transition: opacity 0.1s ease; transform: translate(-50%, 0); }
     }
+
+    /* ── Sidebar · indicador compacto de progreso Core ── */
+    .sidebar-lc-progress {
+      display: none;                     /* oculto por default; JS lo activa si LC.enabled */
+      font-size: 0.7rem; color: var(--text-muted);
+      margin-top: 0.25rem;
+    }
+    .sidebar-lc-progress.on { display: flex; align-items: center; gap: 0.4rem; }
+    .sidebar-lc-progress .lc-mini-bar {
+      flex: 1; min-width: 40px; max-width: 90px; height: 5px;
+      background: rgba(255,255,255,0.08); border-radius: 99px; overflow: hidden;
+    }
+    .sidebar-lc-progress .lc-mini-fill {
+      height: 100%;
+      background: linear-gradient(90deg, #10b981, #34d399);
+      border-radius: 99px; transition: width 0.6s ease;
+    }
+    .sidebar-lc-progress .lc-mini-num { font-variant-numeric: tabular-nums; }
   
