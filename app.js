@@ -298,24 +298,13 @@
 
       // ── Learning Core · sección MVP (ring + chips + recomendación) ─
       if (LC.enabled && LC.conceptNames.size > 0) {
-        const U8_IDS = [31, 32, 33, 34, 35, 36, 37];
-        const SHORT_NAMES = {
-          31: 'Verbos de actividad',
-          32: 'WH preguntas',
-          33: 'Sí/No preguntas',
-          34: 'Negativas',
-          35: 'Do / Does',
-          36: '3ª persona -s',
-          37: 'Afirmativas'
-        };
-        const STATE_LABEL = { unseen: 'Sin ver', learning: 'Aprendiendo', practiced: 'Practicando', rusty: 'Repasar', mastered: 'Dominado' };
-        const conceptStates = U8_IDS.map(cid => ({
+        const conceptStates = LC_U8_IDS.map(cid => ({
           cid,
           state: LC.conceptStateAggregate(cid),
-          name: SHORT_NAMES[cid] || LC.conceptNames.get(cid)?.name || ('C' + cid)
+          name: LC_SHORT_NAMES[cid] || LC.conceptNames.get(cid)?.name || ('C' + cid)
         }));
         const mastered = conceptStates.filter(s => s.state === 'mastered').length;
-        const pct = Math.round((mastered / U8_IDS.length) * 100);
+        const pct = Math.round((mastered / LC_U8_IDS.length) * 100);
 
         html += `
           <div class="lc-course">
@@ -325,13 +314,13 @@
             </div>
             <div class="lc-course-bar"><div class="lc-course-fill" style="width:${pct}%"></div></div>
             <div class="lc-course-chips">
-              ${conceptStates.map(s => `<span class="lc-chip lc-chip-${s.state}" title="${STATE_LABEL[s.state]}">${escapeHtml(s.name)}</span>`).join('')}
+              ${conceptStates.map(s => `<span class="lc-chip lc-chip-${s.state}" title="${LC_STATE_LABEL[s.state]}">${escapeHtml(s.name)}</span>`).join('')}
             </div>
           </div>`;
 
         if (LC.recommendation) {
           const w = LC.recommendation.w;
-          const cName = SHORT_NAMES[w.concept_id] || LC.conceptNames.get(w.concept_id)?.name || 'Concepto';
+          const cName = LC_SHORT_NAMES[w.concept_id] || LC.conceptNames.get(w.concept_id)?.name || 'Concepto';
           const skillCode = LC.recommendation.skillCode;
           const skillLabel = ({ recognize: 'Reconocer', comprehend: 'Comprender', complete: 'Completar', build: 'Construir', transform: 'Transformar', listen: 'Escuchar', write: 'Escribir', speak: 'Hablar', produce: 'Producir' })[skillCode] || skillCode;
           html += `
@@ -390,6 +379,54 @@
     }
 
     // Lanza el repaso de un tipo, filtrado a los items vencidos
+    // ── Learning Core · constantes UI compartidas (renderToday + toast) ────
+    const LC_U8_IDS = [31, 32, 33, 34, 35, 36, 37];
+    const LC_SHORT_NAMES = {
+      31: 'Verbos de actividad',
+      32: 'WH preguntas',
+      33: 'Sí/No preguntas',
+      34: 'Negativas',
+      35: 'Do / Does',
+      36: '3ª persona -s',
+      37: 'Afirmativas'
+    };
+    const LC_STATE_LABEL = { unseen: 'Sin ver', learning: 'Aprendiendo', practiced: 'Practicando', rusty: 'Repasar', mastered: 'Dominado' };
+    // Orden de "avance": mayor índice = mejor state. Solo notificamos upgrades.
+    const LC_STATE_ORDER = { unseen: 0, rusty: 1, learning: 2, practiced: 3, mastered: 4 };
+
+    // Toast: pequeña notificación superior. Un timer global evita solapamiento.
+    let _lcToastTimer = null;
+    function showLCToast(message) {
+      const el = document.getElementById('lc-toast');
+      if (!el) return;
+      el.textContent = message;
+      el.classList.add('show');
+      clearTimeout(_lcToastTimer);
+      _lcToastTimer = setTimeout(() => el.classList.remove('show'), 2800);
+    }
+
+    // Snapshot pre → refreshCoreData → si algún concepto U8 subió de state, notifica el primero.
+    async function lcRefreshAndNotify() {
+      if (!LC.enabled) return;
+      const pre = new Map();
+      for (const [key, m] of LC.mastery.entries()) pre.set(key, m.state);
+      await LC.refreshCoreData();
+      for (const cid of LC_U8_IDS) {
+        // Comparamos por celda concept:skill que ya existía o que apareció ahora.
+        for (const [key, m] of LC.mastery.entries()) {
+          if (!key.startsWith(cid + ':')) continue;
+          const preState = pre.get(key) || 'unseen';
+          const postState = m.state;
+          if (preState === postState) continue;
+          if ((LC_STATE_ORDER[postState] || 0) <= (LC_STATE_ORDER[preState] || 0)) continue; // solo upgrades
+          const cName = LC_SHORT_NAMES[cid] || LC.conceptNames.get(cid)?.name || 'Concepto';
+          const label = LC_STATE_LABEL[postState] || postState;
+          showLCToast(cName + ' → ' + label);
+          return; // solo 1 toast por evento
+        }
+      }
+    }
+
     // Learning Core · dispatcher del botón "Practicar" de la recomendación
     // Usa LC.recommendation pre-computado por LC.pickRecommendation() en refreshCoreData.
     async function practiceRecommendation() {
@@ -2096,7 +2133,7 @@
       // error queda aislado en .catch (nunca rompe el flujo legacy).
       if (LC.enabled) {
         LC.submitFromQuestion(t.id, correct, q.type)
-          .then(() => LC.refreshCoreData())
+          .then(() => lcRefreshAndNotify())
           .catch(e => console.warn('LC dual-write (gramática):', e));
       }
 
@@ -2891,7 +2928,7 @@
         scheduleSrs('phrase', p.id, score.pct >= 95 ? 'easy' : score.pct >= 70 ? 'good' : 'again');
         if (LC.enabled) {
           LC.submitFromPhrase(p.id, score.pct >= 70 ? 'pass' : 'fail', 'produce')
-            .then(function() { return LC.refreshCoreData(); })
+            .then(function() { return lcRefreshAndNotify(); })
             .catch(function(e) { console.warn('LC phrase shadow:', e.message); });
         }
       }
@@ -3237,7 +3274,7 @@
         markPhraseStudied(p.id);
         if (LC.enabled) {
           LC.submitFromPhrase(p.id, quality !== 'again' ? 'pass' : 'fail', 'recognize')
-            .then(function() { return LC.refreshCoreData(); })
+            .then(function() { return lcRefreshAndNotify(); })
             .catch(function(e) { console.warn('LC phrase rate:', e.message); });
         }
       }

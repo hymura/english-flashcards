@@ -1266,4 +1266,26 @@
       .lc-rec { flex-wrap: wrap; }
       .lc-rec-btn { width: 100%; }
     }
+
+    /* ── LC toast: notificación de cambio de estado (upgrades) ── */
+    .lc-toast {
+      position: fixed; top: 24px; left: 50%; transform: translate(-50%, -12px);
+      background: linear-gradient(135deg, #10b981, #059669);
+      color: #fff; padding: 0.7rem 1.1rem; border-radius: 12px;
+      font-size: 0.9rem; font-weight: 600;
+      box-shadow: 0 12px 30px rgba(16,185,129,0.35), 0 2px 8px rgba(0,0,0,0.25);
+      opacity: 0; pointer-events: none;
+      transition: opacity 0.28s ease, transform 0.28s ease;
+      z-index: 9999; max-width: calc(100vw - 2rem);
+      white-space: nowrap; text-overflow: ellipsis; overflow: hidden;
+    }
+    .lc-toast.show {
+      opacity: 1; transform: translate(-50%, 0);
+    }
+    @media (max-width: 640px) {
+      .lc-toast { top: 16px; font-size: 0.82rem; padding: 0.6rem 0.9rem; }
+    }
+    @media (prefers-reduced-motion: reduce) {
+      .lc-toast { transition: opacity 0.1s ease; transform: translate(-50%, 0); }
+    }
   
