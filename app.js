@@ -151,9 +151,10 @@
         await Promise.all([this.loadConceptNames(), this.loadSkills(), this.loadContentByConcept(), this.loadMastery(), this.loadWeakness()]);
         this.pickRecommendation();
       },
-      // Recorre weakness (ya ordenada por priority DESC) y elige el primer item con ruta viable.
-      // Reglas: produce/speak requiere phrases (shadowing); recognize/complete prefiere questions
-      // (grammar quiz) y cae a phrases si no hay. Skips silenciosos si nada encaja.
+      // Recorre weakness (ya ordenada por priority DESC) y elige el primer item con ruta que
+      // realmente entrene la skill solicitada. produce/speak requiere phrases (shadowing) — si
+      // no hay phrases se SALTA al siguiente item, no se cae a grammar (que hoy es recognize
+      // por default). recognize/complete acepta grammar quiz o flashcards/shadow. Skip silencioso.
       pickRecommendation() {
         this.recommendation = null;
         if (!this.enabled || this.weakness.length === 0) return;
@@ -161,10 +162,16 @@
           const skillCode = this.skills.get(w.skill_id) || 'recognize';
           const bucket = this.contentByConcept.get(w.concept_id) || { phrases: [], questions: [] };
           let route = null;
-          if ((skillCode === 'produce' || skillCode === 'speak') && bucket.phrases.length > 0) route = 'shadow';
-          else if ((skillCode === 'recognize' || skillCode === 'complete') && bucket.questions.length > 0) route = 'grammar';
-          else if (bucket.phrases.length > 0) route = 'shadow';
-          else if (bucket.questions.length > 0) route = 'grammar';
+          if (skillCode === 'produce' || skillCode === 'speak') {
+            if (bucket.phrases.length > 0) route = 'shadow';
+            // sin phrases, saltar: grammar quiz por default no entrena produce
+          } else if (skillCode === 'recognize' || skillCode === 'complete') {
+            if (bucket.questions.length > 0) route = 'grammar';
+            else if (bucket.phrases.length > 0) route = 'shadow';
+          } else {
+            if (bucket.phrases.length > 0) route = 'shadow';
+            else if (bucket.questions.length > 0) route = 'grammar';
+          }
           if (route) {
             this.recommendation = { w, phraseIds: bucket.phrases, questionIds: bucket.questions, skillCode, route };
             return;
