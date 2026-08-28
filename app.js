@@ -98,6 +98,8 @@
       weakness: [],              // top-N conceptos débiles [{concept_id, skill_id, priority}]
       conceptNames: new Map(),   // cid -> {code, name}
       skills: new Map(),         // id (numérico) -> code
+      contentByConcept: new Map(), // cid -> {phrases: [ids], questions: [ids], grammar_topics: [ids]}
+      recommendation: null,      // { w, phraseIds, questionIds, skillCode, route } | null
       async loadConceptNames() {
         if (this.conceptNames.size > 0) return;
         const { data, error } = await sb.from('lc_concept').select('id, code, name');
@@ -128,9 +130,46 @@
         if (error) { console.warn('LC.loadWeakness:', error.message); return; }
         this.weakness = data || [];
       },
+      async loadContentByConcept() {
+        if (this.contentByConcept.size > 0) return;
+        const { data, error } = await sb.from('lc_content_concept')
+          .select('content_type, content_id, concept_id');
+        if (error) { console.warn('LC.loadContentByConcept:', error.message); return; }
+        this.contentByConcept = new Map();
+        (data || []).forEach(r => {
+          if (!this.contentByConcept.has(r.concept_id)) {
+            this.contentByConcept.set(r.concept_id, { phrases: [], questions: [], grammar_topics: [] });
+          }
+          const bucket = this.contentByConcept.get(r.concept_id);
+          if (r.content_type === 'phrase') bucket.phrases.push(r.content_id);
+          else if (r.content_type === 'question') bucket.questions.push(r.content_id);
+          else if (r.content_type === 'grammar_topic') bucket.grammar_topics.push(r.content_id);
+        });
+      },
       async refreshCoreData() {
         if (!this.enabled) return;
-        await Promise.all([this.loadConceptNames(), this.loadSkills(), this.loadMastery(), this.loadWeakness()]);
+        await Promise.all([this.loadConceptNames(), this.loadSkills(), this.loadContentByConcept(), this.loadMastery(), this.loadWeakness()]);
+        this.pickRecommendation();
+      },
+      // Recorre weakness (ya ordenada por priority DESC) y elige el primer item con ruta viable.
+      // Reglas: produce/speak requiere phrases (shadowing); recognize/complete prefiere questions
+      // (grammar quiz) y cae a phrases si no hay. Skips silenciosos si nada encaja.
+      pickRecommendation() {
+        this.recommendation = null;
+        if (!this.enabled || this.weakness.length === 0) return;
+        for (const w of this.weakness) {
+          const skillCode = this.skills.get(w.skill_id) || 'recognize';
+          const bucket = this.contentByConcept.get(w.concept_id) || { phrases: [], questions: [] };
+          let route = null;
+          if ((skillCode === 'produce' || skillCode === 'speak') && bucket.phrases.length > 0) route = 'shadow';
+          else if ((skillCode === 'recognize' || skillCode === 'complete') && bucket.questions.length > 0) route = 'grammar';
+          else if (bucket.phrases.length > 0) route = 'shadow';
+          else if (bucket.questions.length > 0) route = 'grammar';
+          if (route) {
+            this.recommendation = { w, phraseIds: bucket.phrases, questionIds: bucket.questions, skillCode, route };
+            return;
+          }
+        }
       },
       // Agrega el mejor state entre las skills del concepto para display resumido.
       // Precedencia: mastered > practiced > learning > rusty > unseen.
@@ -283,10 +322,10 @@
             </div>
           </div>`;
 
-        if (LC.weakness.length > 0) {
-          const w = LC.weakness[0];
+        if (LC.recommendation) {
+          const w = LC.recommendation.w;
           const cName = SHORT_NAMES[w.concept_id] || LC.conceptNames.get(w.concept_id)?.name || 'Concepto';
-          const skillCode = LC.skills.get(w.skill_id) || '';
+          const skillCode = LC.recommendation.skillCode;
           const skillLabel = ({ recognize: 'Reconocer', comprehend: 'Comprender', complete: 'Completar', build: 'Construir', transform: 'Transformar', listen: 'Escuchar', write: 'Escribir', speak: 'Hablar', produce: 'Producir' })[skillCode] || skillCode;
           html += `
             <div class="lc-rec">
@@ -345,33 +384,19 @@
 
     // Lanza el repaso de un tipo, filtrado a los items vencidos
     // Learning Core · dispatcher del botón "Practicar" de la recomendación
+    // Usa LC.recommendation pre-computado por LC.pickRecommendation() en refreshCoreData.
     async function practiceRecommendation() {
-      if (!LC.enabled || LC.weakness.length === 0) return;
-      const w = LC.weakness[0];
-      const skillCode = LC.skills.get(w.skill_id) || 'recognize';
-      const { data: links, error } = await sb.from('lc_content_concept')
-        .select('content_type, content_id').eq('concept_id', w.concept_id);
-      if (error) { console.warn('practiceRecommendation:', error.message); return; }
-
-      const phraseIds = (links || []).filter(l => l.content_type === 'phrase').map(l => l.content_id);
-      const questionIds = (links || []).filter(l => l.content_type === 'question').map(l => l.content_id);
-      const phraseSet = new Set(phraseIds);
-      const questionSet = new Set(questionIds);
-
-      // Routing por skill: produce/speak → shadowing; recognize/complete → grammar quiz o flashcards
-      if ((skillCode === 'produce' || skillCode === 'speak') && phraseIds.length > 0) {
+      if (!LC.enabled || !LC.recommendation) return;
+      const rec = LC.recommendation;
+      const phraseSet = new Set(rec.phraseIds);
+      const questionSet = new Set(rec.questionIds);
+      if (rec.route === 'shadow') {
         openTab('shadow');
         restartShadow(allPhrases.filter(p => phraseSet.has(p.id)));
-      } else if (questionIds.length > 0) {
+      } else if (rec.route === 'grammar') {
         await loadGrammar();
         openTab('grammar'); setGrammarMode('quiz');
         startGrammarQuiz(false, grammarData.filter(g => questionSet.has(g.id)));
-      } else if (phraseIds.length > 0) {
-        // Fallback: shadowing con las phrases del concepto (flashcards con filtro llega en iter posterior)
-        openTab('shadow');
-        restartShadow(allPhrases.filter(p => phraseSet.has(p.id)));
-      } else {
-        openTab('shadow');
       }
     }
 
