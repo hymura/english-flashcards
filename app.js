@@ -310,7 +310,7 @@
           <div class="lc-course">
             <div class="lc-course-head">
               <span class="lc-course-title">📖 Tu curso · Presente simple</span>
-              <span class="lc-course-count">${mastered} / ${U8_IDS.length} dominados</span>
+              <span class="lc-course-count">${mastered} / ${LC_U8_IDS.length} dominados</span>
             </div>
             <div class="lc-course-bar"><div class="lc-course-fill" style="width:${pct}%"></div></div>
             <div class="lc-course-chips">
