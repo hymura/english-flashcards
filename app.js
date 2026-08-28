@@ -97,11 +97,18 @@
       mastery: new Map(),        // "cid:sid" -> {state, score, decayed_score, confidence}
       weakness: [],              // top-N conceptos débiles [{concept_id, skill_id, priority}]
       conceptNames: new Map(),   // cid -> {code, name}
+      skills: new Map(),         // id (numérico) -> code
       async loadConceptNames() {
         if (this.conceptNames.size > 0) return;
         const { data, error } = await sb.from('lc_concept').select('id, code, name');
         if (error) { console.warn('LC.loadConceptNames:', error.message); return; }
         (data || []).forEach(c => this.conceptNames.set(c.id, { code: c.code, name: c.name }));
+      },
+      async loadSkills() {
+        if (this.skills.size > 0) return;
+        const { data, error } = await sb.from('lc_skill').select('id, code');
+        if (error) { console.warn('LC.loadSkills:', error.message); return; }
+        (data || []).forEach(s => this.skills.set(s.id, s.code));
       },
       async loadMastery() {
         if (!this.enabled) return;
@@ -116,13 +123,26 @@
       async loadWeakness() {
         if (!this.enabled) return;
         const { data, error } = await sb.from('v_lc_weakness')
-          .select('concept_id, skill_id, priority').limit(5);
+          .select('concept_id, skill_id, priority')
+          .order('priority', { ascending: false }).limit(5);
         if (error) { console.warn('LC.loadWeakness:', error.message); return; }
         this.weakness = data || [];
       },
       async refreshCoreData() {
         if (!this.enabled) return;
-        await Promise.all([this.loadConceptNames(), this.loadMastery(), this.loadWeakness()]);
+        await Promise.all([this.loadConceptNames(), this.loadSkills(), this.loadMastery(), this.loadWeakness()]);
+      },
+      // Agrega el mejor state entre las skills del concepto para display resumido.
+      // Precedencia: mastered > practiced > learning > rusty > unseen.
+      conceptStateAggregate(conceptId) {
+        const order = { unseen: 0, rusty: 1, learning: 2, practiced: 3, mastered: 4 };
+        let best = 'unseen';
+        for (const [key, m] of this.mastery.entries()) {
+          if (key.startsWith(conceptId + ':')) {
+            if ((order[m.state] || 0) > (order[best] || 0)) best = m.state;
+          }
+        }
+        return best;
       }
     };
     window.LC = LC;   // expuesto para depuración y kill switch: LC._force = false (apaga todo)
@@ -230,6 +250,56 @@
           <div class="today-cta-sub">${ctaSub}</div>
         </div>`;
 
+      // ── Learning Core · sección MVP (ring + chips + recomendación) ─
+      if (LC.enabled && LC.conceptNames.size > 0) {
+        const U8_IDS = [31, 32, 33, 34, 35, 36, 37];
+        const SHORT_NAMES = {
+          31: 'Verbos de actividad',
+          32: 'WH preguntas',
+          33: 'Sí/No preguntas',
+          34: 'Negativas',
+          35: 'Do / Does',
+          36: '3ª persona -s',
+          37: 'Afirmativas'
+        };
+        const STATE_LABEL = { unseen: 'Sin ver', learning: 'Aprendiendo', practiced: 'Practicando', rusty: 'Repasar', mastered: 'Dominado' };
+        const conceptStates = U8_IDS.map(cid => ({
+          cid,
+          state: LC.conceptStateAggregate(cid),
+          name: SHORT_NAMES[cid] || LC.conceptNames.get(cid)?.name || ('C' + cid)
+        }));
+        const mastered = conceptStates.filter(s => s.state === 'mastered').length;
+        const pct = Math.round((mastered / U8_IDS.length) * 100);
+
+        html += `
+          <div class="lc-course">
+            <div class="lc-course-head">
+              <span class="lc-course-title">📖 Tu curso · Presente simple</span>
+              <span class="lc-course-count">${mastered} / ${U8_IDS.length} dominados</span>
+            </div>
+            <div class="lc-course-bar"><div class="lc-course-fill" style="width:${pct}%"></div></div>
+            <div class="lc-course-chips">
+              ${conceptStates.map(s => `<span class="lc-chip lc-chip-${s.state}" title="${STATE_LABEL[s.state]}">${escapeHtml(s.name)}</span>`).join('')}
+            </div>
+          </div>`;
+
+        if (LC.weakness.length > 0) {
+          const w = LC.weakness[0];
+          const cName = SHORT_NAMES[w.concept_id] || LC.conceptNames.get(w.concept_id)?.name || 'Concepto';
+          const skillCode = LC.skills.get(w.skill_id) || '';
+          const skillLabel = ({ recognize: 'Reconocer', comprehend: 'Comprender', complete: 'Completar', build: 'Construir', transform: 'Transformar', listen: 'Escuchar', write: 'Escribir', speak: 'Hablar', produce: 'Producir' })[skillCode] || skillCode;
+          html += `
+            <div class="lc-rec">
+              <div class="lc-rec-head">✨ Practica esto</div>
+              <div class="lc-rec-body">
+                <div class="lc-rec-concept">${escapeHtml(cName)}</div>
+                <div class="lc-rec-skill">${escapeHtml(skillLabel)}</div>
+              </div>
+              <button class="lc-rec-btn" onclick="practiceRecommendation()">Practicar →</button>
+            </div>`;
+        }
+      }
+
       if (total > 0) {
         html += '<div class="today-section-t">Repasos pendientes</div>';
         TODAY_TYPES.forEach(t => {
@@ -274,6 +344,37 @@
     }
 
     // Lanza el repaso de un tipo, filtrado a los items vencidos
+    // Learning Core · dispatcher del botón "Practicar" de la recomendación
+    async function practiceRecommendation() {
+      if (!LC.enabled || LC.weakness.length === 0) return;
+      const w = LC.weakness[0];
+      const skillCode = LC.skills.get(w.skill_id) || 'recognize';
+      const { data: links, error } = await sb.from('lc_content_concept')
+        .select('content_type, content_id').eq('concept_id', w.concept_id);
+      if (error) { console.warn('practiceRecommendation:', error.message); return; }
+
+      const phraseIds = (links || []).filter(l => l.content_type === 'phrase').map(l => l.content_id);
+      const questionIds = (links || []).filter(l => l.content_type === 'question').map(l => l.content_id);
+      const phraseSet = new Set(phraseIds);
+      const questionSet = new Set(questionIds);
+
+      // Routing por skill: produce/speak → shadowing; recognize/complete → grammar quiz o flashcards
+      if ((skillCode === 'produce' || skillCode === 'speak') && phraseIds.length > 0) {
+        openTab('shadow');
+        restartShadow(allPhrases.filter(p => phraseSet.has(p.id)));
+      } else if (questionIds.length > 0) {
+        await loadGrammar();
+        openTab('grammar'); setGrammarMode('quiz');
+        startGrammarQuiz(false, grammarData.filter(g => questionSet.has(g.id)));
+      } else if (phraseIds.length > 0) {
+        // Fallback: shadowing con las phrases del concepto (flashcards con filtro llega en iter posterior)
+        openTab('shadow');
+        restartShadow(allPhrases.filter(p => phraseSet.has(p.id)));
+      } else {
+        openTab('shadow');
+      }
+    }
+
     async function reviewDue(type) {
       const ids = new Set(dueIds(type));
       if (ids.size === 0) return;

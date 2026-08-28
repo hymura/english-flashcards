@@ -1198,4 +1198,72 @@
       background: rgba(16,185,129,0.12); border: 1px solid rgba(16,185,129,0.3); color: #6ee7b7;
       border-radius: 10px; padding: 0.6rem 0.9rem; font-size: 0.85rem; margin-top: 0.75rem; text-align: center;
     }
+
+    /* ── Learning Core · dashboard Hoy (MVP progress) ── */
+    .lc-course {
+      background: linear-gradient(160deg, #16192a, #12142a);
+      border: 1px solid var(--border); border-radius: 18px;
+      padding: 1.1rem 1.25rem; margin-bottom: 1rem;
+    }
+    .lc-course-head {
+      display: flex; justify-content: space-between; align-items: baseline;
+      margin-bottom: 0.55rem;
+    }
+    .lc-course-title { font-size: 0.95rem; font-weight: 700; color: var(--text); }
+    .lc-course-count {
+      font-size: 0.78rem; font-weight: 700; color: var(--text-muted);
+      font-variant-numeric: tabular-nums;
+    }
+    .lc-course-bar {
+      height: 8px; background: rgba(255,255,255,0.06);
+      border-radius: 99px; overflow: hidden; margin-bottom: 0.9rem;
+    }
+    .lc-course-fill {
+      height: 100%; background: linear-gradient(90deg, #10b981, #34d399);
+      border-radius: 99px; transition: width 0.6s ease;
+    }
+    .lc-course-chips {
+      display: flex; flex-wrap: wrap; gap: 0.35rem;
+    }
+    .lc-chip {
+      font-size: 0.72rem; font-weight: 600;
+      padding: 0.25rem 0.6rem; border-radius: 99px;
+      border: 1px solid var(--border);
+      background: #1a1c2f;
+      color: var(--text-muted);
+      cursor: default;
+      transition: transform 0.15s;
+    }
+    .lc-chip:hover { transform: translateY(-1px); }
+    .lc-chip-unseen    { background: #1a1c2f;                border-color: #2a2d40; color: #8a90a6; }
+    .lc-chip-learning  { background: rgba(251,146,60,0.10);   border-color: rgba(251,146,60,0.4); color: #fbbf24; }
+    .lc-chip-practiced { background: rgba(14,165,233,0.12);   border-color: rgba(14,165,233,0.45); color: #7dd3fc; }
+    .lc-chip-mastered  { background: rgba(16,185,129,0.14);   border-color: rgba(16,185,129,0.5); color: #6ee7b7; }
+    .lc-chip-rusty     { background: rgba(239,68,68,0.10);    border-color: rgba(239,68,68,0.4);  color: #fca5a5; }
+
+    .lc-rec {
+      display: flex; align-items: center; gap: 0.9rem;
+      background: linear-gradient(160deg, rgba(168,85,247,0.10), rgba(124,58,237,0.06));
+      border: 1px solid rgba(168,85,247,0.3);
+      border-radius: 16px; padding: 0.85rem 1rem;
+      margin-bottom: 1rem;
+    }
+    .lc-rec-head {
+      font-size: 0.7rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase;
+      color: #c4b5fd; white-space: nowrap;
+    }
+    .lc-rec-body { flex: 1; min-width: 0; }
+    .lc-rec-concept { font-size: 0.95rem; font-weight: 700; color: var(--text); }
+    .lc-rec-skill   { font-size: 0.75rem; color: var(--text-muted); margin-top: 0.15rem; }
+    .lc-rec-btn {
+      background: linear-gradient(135deg, #a855f7, #7c3aed); color: #fff; border: none;
+      border-radius: 10px; padding: 0.55rem 0.95rem; font-size: 0.82rem; font-weight: 700;
+      cursor: pointer; white-space: nowrap; transition: all 0.2s;
+    }
+    .lc-rec-btn:hover { transform: translateY(-1px); box-shadow: 0 6px 18px rgba(168,85,247,0.4); }
+
+    @media (max-width: 640px) {
+      .lc-rec { flex-wrap: wrap; }
+      .lc-rec-btn { width: 100%; }
+    }
   
