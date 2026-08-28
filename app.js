@@ -9,6 +9,7 @@
     let current = 0;
     let seen    = new Set();
     let activeCategory = 'all';
+    let activeConcept = null;     // cid U8 si el user filtra por concepto; null = sin filtro Core
     let allPhrases = [];          // caché completa traída de Supabase
     let currentUser = null;       // usuario autenticado (o null = invitado)
     let progressMap = new Map();  // phrase_id -> { status, best_score, attempts }
@@ -1463,15 +1464,46 @@
                  </div>`;
       });
 
+      // ── Learning Core · chips de concepto U8 (solo si LC hidratado) ──
+      // Un chip por concepto U8 con phrases mapeadas. Formato: "Negativas (14)".
+      // Filtro compuesto AND con activeCategory (seleccionar concepto resetea category).
+      if (LC.enabled && LC.contentByConcept.size > 0) {
+        const conceptChips = LC_U8_IDS
+          .map(cid => ({ cid, count: (LC.contentByConcept.get(cid)?.phrases || []).length }))
+          .filter(c => c.count > 0);
+        if (conceptChips.length > 0) {
+          html += '<div class="cat-sep" title="Filtrar por concepto U8">·</div>';
+          conceptChips.forEach(c => {
+            const name = LC_SHORT_NAMES[c.cid] || LC.conceptNames.get(c.cid)?.name || ('C' + c.cid);
+            const active = activeConcept === c.cid ? ' active' : '';
+            html += `<div class="cat-chip cat-chip-concept${active}" data-concept="${c.cid}" onclick="selectConcept(${c.cid}, this)">
+                       ✨ ${escapeHtml(name)} <span class="cat-count">${c.count}</span>
+                     </div>`;
+          });
+        }
+      }
+
       bar.innerHTML = html;
       bar.classList.remove('hidden');
     }
 
     function selectCategory(cat, el) {
       activeCategory = cat;
+      activeConcept = null;  // seleccionar categoría desactiva el filtro por concepto
       document.querySelectorAll('.cat-chip').forEach(c => c.classList.remove('active'));
       el.classList.add('active');
       // Reset session for new category
+      seen.clear();
+      document.getElementById('completed').classList.add('hidden');
+      document.getElementById('main-content').classList.remove('hidden');
+      loadPhrases();
+    }
+
+    function selectConcept(cid, el) {
+      activeConcept = cid;
+      activeCategory = 'all';  // filtro por concepto sustituye al de categoría
+      document.querySelectorAll('.cat-chip').forEach(c => c.classList.remove('active'));
+      el.classList.add('active');
       seen.clear();
       document.getElementById('completed').classList.add('hidden');
       document.getElementById('main-content').classList.remove('hidden');
@@ -1730,9 +1762,16 @@
 
     // ── Load phrases (filter cache + shuffle) ─────────────────────
     function loadPhrases() {
-      const filtered = (activeCategory && activeCategory !== 'all')
-        ? allPhrases.filter(p => p.category === activeCategory)
-        : allPhrases;
+      let filtered;
+      if (activeConcept != null) {
+        // Filtro por concepto U8: solo phrases mapeadas a activeConcept
+        const ids = new Set((LC.contentByConcept.get(activeConcept)?.phrases) || []);
+        filtered = allPhrases.filter(p => ids.has(p.id));
+      } else if (activeCategory && activeCategory !== 'all') {
+        filtered = allPhrases.filter(p => p.category === activeCategory);
+      } else {
+        filtered = allPhrases;
+      }
       phrases = shuffle(filtered);
       document.getElementById('main-content').classList.remove('hidden');
       document.getElementById('main-content').classList.add('fade-in');

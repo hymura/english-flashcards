@@ -1306,4 +1306,25 @@
       border-radius: 99px; transition: width 0.6s ease;
     }
     .sidebar-lc-progress .lc-mini-num { font-variant-numeric: tabular-nums; }
+
+    /* ── Chips de concepto U8 en la barra de flashcards ── */
+    .cat-sep {
+      display: inline-flex; align-items: center; justify-content: center;
+      color: var(--text-muted); opacity: 0.6; font-weight: 700; padding: 0 0.4rem;
+      user-select: none; pointer-events: none;
+    }
+    .cat-chip-concept {
+      border-color: rgba(168, 85, 247, 0.35);
+      background: rgba(168, 85, 247, 0.08);
+      color: #e0d7f7;
+    }
+    .cat-chip-concept:hover {
+      border-color: rgba(168, 85, 247, 0.7);
+      background: rgba(168, 85, 247, 0.15);
+    }
+    .cat-chip-concept.active {
+      background: linear-gradient(135deg, #7c3aed, #a855f7);
+      border-color: transparent; color: #fff;
+      box-shadow: 0 4px 14px rgba(168, 85, 247, 0.35);
+    }
   
