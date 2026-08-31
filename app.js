@@ -1076,6 +1076,23 @@ U15: 55=Añadir · 56=Contrastar · 57=Causa/efecto · 58=Tiempo · 59=Ilustrar 
       } catch (e) { console.warn('LC.evaluateMessage:', e.message); return null; }
     };
 
+    // Iter B.4 · registra evidence en el Core a partir del JSON del evaluador.
+    // skillCode fijo a 'produce' (id=9): el chat es producción espontánea de lenguaje.
+    // Fire-and-forget. Nunca lanza. Aporta al mastery de U8/U14/U15 cuando el concepto está mapeado.
+    LC.submitFromEvaluation = async function(evaluation) {
+      if (!this.enabled || !currentUser || !evaluation) return;
+      const concepts = evaluation.concepts;
+      if (!Array.isArray(concepts) || concepts.length === 0) return;
+      const { data: sk, error: eSk } = await sb.from('lc_skill')
+        .select('id').eq('code', 'produce').single();
+      if (eSk || !sk) { console.warn('LC.submitFromEvaluation skill:', eSk && eSk.message); return; }
+      const items = concepts
+        .filter(c => c && c.cid != null && ['pass','partial','fail'].includes(c.outcome))
+        .map(c => ({ conceptId: c.cid, skillId: sk.id, outcome: c.outcome }));
+      if (items.length === 0) return;
+      await this.recordEvidence(items);
+    };
+
     // Parseo defensivo: JSON.parse directo → substring {..} → cierre forzado. Nunca lanza.
     function _parseEvalJson(raw) {
       const cleanFromCodeFence = raw.replace(/^```(?:json)?\s*|\s*```$/gi, '').trim();
@@ -1170,11 +1187,18 @@ U15: 55=Añadir · 56=Contrastar · 57=Causa/efecto · 58=Tiempo · 59=Ilustrar 
       document.getElementById('chat-send').disabled = true;
 
       // Iter B.2 · evaluación en paralelo (no bloquea la respuesta del chat)
+      // Iter B.4 · si la evaluación tiene conceptos U8/U14/U15, dispara evidence al Core
       if (chatEvalMode) {
-        LC.evaluateMessage(text).then(result => {
+        LC.evaluateMessage(text).then(async result => {
           if (chatHistory[userIdx]) {
             chatHistory[userIdx].evaluation = result || null;
             renderChat();
+          }
+          if (result && LC.enabled) {
+            try {
+              await LC.submitFromEvaluation(result);
+              await lcRefreshAndNotify(); // sidebar + toast + re-render Today si aplica
+            } catch (e) { console.warn('LC eval hook:', e.message); }
           }
         }).catch(() => {
           if (chatHistory[userIdx]) { chatHistory[userIdx].evaluation = null; renderChat(); }
