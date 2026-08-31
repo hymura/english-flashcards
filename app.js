@@ -166,12 +166,16 @@
         this.contentByConcept = new Map();
         (data || []).forEach(r => {
           if (!this.contentByConcept.has(r.concept_id)) {
-            this.contentByConcept.set(r.concept_id, { phrases: [], questions: [], grammar_topics: [] });
+            this.contentByConcept.set(r.concept_id, {
+              phrases: [], questions: [], grammar_topics: [], verbs: [], linkers: []
+            });
           }
           const bucket = this.contentByConcept.get(r.concept_id);
           if (r.content_type === 'phrase') bucket.phrases.push(r.content_id);
           else if (r.content_type === 'question') bucket.questions.push(r.content_id);
           else if (r.content_type === 'grammar_topic') bucket.grammar_topics.push(r.content_id);
+          else if (r.content_type === 'verb') bucket.verbs.push(r.content_id);
+          else if (r.content_type === 'linker') bucket.linkers.push(r.content_id);
         });
       },
       async refreshCoreData() {
@@ -188,20 +192,32 @@
         if (!this.enabled || this.weakness.length === 0) return;
         for (const w of this.weakness) {
           const skillCode = this.skills.get(w.skill_id) || 'recognize';
-          const bucket = this.contentByConcept.get(w.concept_id) || { phrases: [], questions: [] };
+          const bucket = this.contentByConcept.get(w.concept_id) || { phrases: [], questions: [], verbs: [], linkers: [] };
           let route = null;
           if (skillCode === 'produce' || skillCode === 'speak') {
             if (bucket.phrases.length > 0) route = 'shadow';
             // sin phrases, saltar: grammar quiz por default no entrena produce
-          } else if (skillCode === 'recognize' || skillCode === 'complete') {
+          } else if (skillCode === 'recognize' || skillCode === 'complete' || skillCode === 'transform') {
+            // Preferencia: grammar quiz > verbs quiz > linkers quiz > shadow fallback
             if (bucket.questions.length > 0) route = 'grammar';
+            else if (bucket.verbs.length > 0) route = 'verbs-quiz';
+            else if (bucket.linkers.length > 0) route = 'linkers-quiz';
             else if (bucket.phrases.length > 0) route = 'shadow';
           } else {
             if (bucket.phrases.length > 0) route = 'shadow';
             else if (bucket.questions.length > 0) route = 'grammar';
+            else if (bucket.verbs.length > 0) route = 'verbs-quiz';
+            else if (bucket.linkers.length > 0) route = 'linkers-quiz';
           }
           if (route) {
-            this.recommendation = { w, phraseIds: bucket.phrases, questionIds: bucket.questions, skillCode, route };
+            this.recommendation = {
+              w,
+              phraseIds:   bucket.phrases   || [],
+              questionIds: bucket.questions || [],
+              verbIds:     bucket.verbs     || [],
+              linkerIds:   bucket.linkers   || [],
+              skillCode, route
+            };
             return;
           }
         }
@@ -677,15 +693,25 @@
     async function practiceRecommendation() {
       if (!LC.enabled || !LC.recommendation) return;
       const rec = LC.recommendation;
-      const phraseSet = new Set(rec.phraseIds);
-      const questionSet = new Set(rec.questionIds);
       if (rec.route === 'shadow') {
+        const phraseSet = new Set(rec.phraseIds);
         openTab('shadow');
         restartShadow(allPhrases.filter(p => phraseSet.has(p.id)));
       } else if (rec.route === 'grammar') {
+        const questionSet = new Set(rec.questionIds);
         await loadGrammar();
         openTab('grammar'); setGrammarMode('quiz');
         startGrammarQuiz(false, grammarData.filter(g => questionSet.has(g.id)));
+      } else if (rec.route === 'verbs-quiz') {
+        const verbSet = new Set(rec.verbIds);
+        await loadVerbs();
+        openTab('verbs'); setVerbMode('quiz');
+        startVerbQuiz(false, verbsData.filter(v => verbSet.has(v.id)));
+      } else if (rec.route === 'linkers-quiz') {
+        const linkerSet = new Set(rec.linkerIds);
+        await loadLinkers();
+        openTab('linkers'); setLinkerMode('quiz');
+        startQuiz(false, linkersData.filter(l => linkerSet.has(l.id)));
       }
     }
 
@@ -2658,6 +2684,38 @@
       verbsData = data || [];
       await loadVerbProgress();
       buildVerbTypePills();
+      renderVerbConceptChips();
+      renderVerbs();
+    }
+
+    // Iter A.7 · chips concepto U14 en la sección Verbos
+    let activeVerbConcept = null;
+    function renderVerbConceptChips() {
+      const bar = document.getElementById('verb-concept-chips');
+      if (!bar) return;
+      if (!LC.enabled || LC.contentByConcept.size === 0) { bar.innerHTML = ''; return; }
+      const chips = LC_U14_IDS
+        .map(cid => ({ cid, count: (LC.contentByConcept.get(cid)?.verbs || []).length }))
+        .filter(c => c.count > 0);
+      if (chips.length === 0) { bar.innerHTML = ''; return; }
+      bar.innerHTML = chips.map(c => {
+        const name = LC_SHORT_NAMES[c.cid] || LC.conceptNames.get(c.cid)?.name || ('C' + c.cid);
+        const active = activeVerbConcept === c.cid ? ' active' : '';
+        return `<div class="cat-chip cat-chip-concept${active}" onclick="selectVerbConcept(${c.cid}, this)">
+                  ✨ ${escapeHtml(name)} <span class="cat-count">${c.count}</span>
+                </div>`;
+      }).join('');
+    }
+    function selectVerbConcept(cid, el) {
+      activeVerbConcept = cid;
+      // reset legacy pill al 'Todos' visualmente
+      activeVerbType = 'all';
+      document.querySelectorAll('#verb-types .cat-chip').forEach(c => c.classList.remove('active'));
+      const allChip = document.querySelector('#verb-types [data-vt="all"]');
+      if (allChip) allChip.classList.add('active');
+      // visual chip concepto activo
+      document.querySelectorAll('#verb-concept-chips .cat-chip-concept').forEach(c => c.classList.remove('active'));
+      el.classList.add('active');
       renderVerbs();
     }
 
@@ -2673,8 +2731,10 @@
 
     function filterVerbType(t, el) {
       activeVerbType = t;
+      activeVerbConcept = null;  // filtro legacy limpia el filtro concepto
       document.querySelectorAll('#verb-types .cat-chip').forEach(c => c.classList.remove('active'));
       if (el) el.classList.add('active');
+      document.querySelectorAll('#verb-concept-chips .cat-chip-concept').forEach(c => c.classList.remove('active'));
       renderVerbs();
     }
 
@@ -2682,7 +2742,12 @@
       if (!verbsData) return;
       const q = (document.getElementById('verb-search').value || '').toLowerCase().trim();
       let list = verbsData;
-      if (activeVerbType !== 'all') list = list.filter(v => v.pattern_type === activeVerbType);
+      if (activeVerbConcept != null) {
+        const ids = new Set((LC.contentByConcept.get(activeVerbConcept)?.verbs) || []);
+        list = list.filter(v => ids.has(v.id));
+      } else if (activeVerbType !== 'all') {
+        list = list.filter(v => v.pattern_type === activeVerbType);
+      }
       if (q) list = list.filter(v =>
         v.infinitive.toLowerCase().includes(q) ||
         v.past_simple.toLowerCase().includes(q) ||
@@ -2838,6 +2903,10 @@
       } else if (weakOnly === true) {
         const weakIds = new Set(verbStats().weak.map(w => w.verb.id));
         base = verbsData.filter(v => weakIds.has(v.id));
+      } else if (activeVerbConcept != null) {
+        // Iter A.7: si hay filtro concepto activo, cuenta como pool
+        const ids = new Set((LC.contentByConcept.get(activeVerbConcept)?.verbs) || []);
+        base = verbsData.filter(v => ids.has(v.id));
       } else {
         const q = (document.getElementById('verb-search').value || '').toLowerCase().trim();
         base = q ? verbsData.filter(v =>
@@ -2978,22 +3047,60 @@
       const pills = ['<div class="cat-chip active" data-lcat="all" onclick="filterLinkers(\'all\', this)">Todos</div>']
         .concat(cats.map(c => `<div class="cat-chip" data-lcat="${c}" onclick="filterLinkers('${c.replace(/'/g,"\\'")}', this)">${c}</div>`));
       document.getElementById('linker-cats').innerHTML = pills.join('');
+      renderLinkerConceptChips();
+      renderLinkers();
+    }
+
+    // Iter A.7 · chips concepto U15 (turquesa) en la sección Conectores
+    let activeLinkerConcept = null;
+    function renderLinkerConceptChips() {
+      const bar = document.getElementById('linker-concept-chips');
+      if (!bar) return;
+      if (!LC.enabled || LC.contentByConcept.size === 0) { bar.innerHTML = ''; return; }
+      const chips = LC_U15_IDS
+        .map(cid => ({ cid, count: (LC.contentByConcept.get(cid)?.linkers || []).length }))
+        .filter(c => c.count > 0);
+      if (chips.length === 0) { bar.innerHTML = ''; return; }
+      bar.innerHTML = chips.map(c => {
+        const name = LC_SHORT_NAMES[c.cid] || LC.conceptNames.get(c.cid)?.name || ('C' + c.cid);
+        const active = activeLinkerConcept === c.cid ? ' active' : '';
+        return `<div class="cat-chip cat-chip-concept-u15${active}" onclick="selectLinkerConcept(${c.cid}, this)">
+                  ✨ ${escapeHtml(name)} <span class="cat-count">${c.count}</span>
+                </div>`;
+      }).join('');
+    }
+    function selectLinkerConcept(cid, el) {
+      activeLinkerConcept = cid;
+      activeLinkerCat = 'all';
+      document.querySelectorAll('#linker-cats .cat-chip').forEach(c => c.classList.remove('active'));
+      const allChip = document.querySelector('#linker-cats [data-lcat="all"]');
+      if (allChip) allChip.classList.add('active');
+      document.querySelectorAll('#linker-concept-chips .cat-chip-concept-u15').forEach(c => c.classList.remove('active'));
+      el.classList.add('active');
       renderLinkers();
     }
 
     function filterLinkers(cat, el) {
       activeLinkerCat = cat;
+      activeLinkerConcept = null; // filtro legacy limpia el filtro concepto
       document.querySelectorAll('#linker-cats .cat-chip').forEach(c => c.classList.remove('active'));
       if (el) el.classList.add('active');
+      document.querySelectorAll('#linker-concept-chips .cat-chip-concept-u15').forEach(c => c.classList.remove('active'));
       renderLinkers();
     }
 
     function renderLinkers() {
       if (!linkersData) return;
       const q = (document.getElementById('linker-search').value || '').toLowerCase().trim();
-      let list = activeLinkerCat === 'all'
-        ? linkersData
-        : linkersData.filter(l => l.category === activeLinkerCat);
+      let list;
+      if (activeLinkerConcept != null) {
+        const ids = new Set((LC.contentByConcept.get(activeLinkerConcept)?.linkers) || []);
+        list = linkersData.filter(l => ids.has(l.id));
+      } else if (activeLinkerCat === 'all') {
+        list = linkersData;
+      } else {
+        list = linkersData.filter(l => l.category === activeLinkerCat);
+      }
       if (q) {
         list = list.filter(l =>
           l.word.toLowerCase().includes(q) ||
@@ -3342,6 +3449,10 @@
       } else if (weakOnly === true) {
         const weakIds = new Set(linkerStats().weak.map(w => w.linker.id));
         base = linkersData.filter(l => weakIds.has(l.id));
+      } else if (activeLinkerConcept != null) {
+        // Iter A.7: filtro concepto U15 activo
+        const ids = new Set((LC.contentByConcept.get(activeLinkerConcept)?.linkers) || []);
+        base = linkersData.filter(l => ids.has(l.id));
       } else {
         base = activeLinkerCat === 'all' ? linkersData : linkersData.filter(l => l.category === activeLinkerCat);
       }

@@ -1411,6 +1411,33 @@
       border: 1px solid var(--border);
       user-select: none;
     }
+    /* Iter A.7: barra genérica para chips concepto en Verbos y Conectores */
+    .section-concept-bar {
+      display: flex; flex-wrap: wrap; gap: 0.4rem;
+      margin: 0.4rem 0 0.85rem;
+    }
+    .section-concept-bar:empty { display: none; }
+    .section-concept-bar .cat-chip {
+      font-size: 0.75rem; padding: 0.32rem 0.7rem;
+      border-radius: 99px; cursor: pointer;
+      border: 1px solid var(--border);
+      user-select: none;
+    }
+    /* Variante turquesa (U15) para diferenciar de U14 granate */
+    .cat-chip-concept-u15 {
+      border-color: rgba(20,184,166,0.4);
+      background: rgba(20,184,166,0.10);
+      color: #d1fae5;
+    }
+    .cat-chip-concept-u15:hover {
+      border-color: rgba(20,184,166,0.7);
+      background: rgba(20,184,166,0.16);
+    }
+    .cat-chip-concept-u15.active {
+      background: linear-gradient(135deg, #14b8a6, #0d9488);
+      border-color: transparent; color: #fff;
+      box-shadow: 0 4px 14px rgba(20, 184, 166, 0.35);
+    }
 
     /* ── Onboarding LC (primer login) ── */
     .lc-onb {
