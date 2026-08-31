@@ -1095,8 +1095,8 @@ U15: 55=Añadir · 56=Contrastar · 57=Causa/efecto · 58=Tiempo · 59=Ilustrar 
           if (attempt === maxRetries) throw e;
           lastErr = e;
         }
-        // Backoff: 1s primer retry, 2s segundo
-        await new Promise(r => setTimeout(r, 1000 * (attempt + 1)));
+        // Backoff: 3s primer retry, 6s segundo. Groq rate-limita ~30-60s bajo spike.
+        await new Promise(r => setTimeout(r, 3000 * (attempt + 1)));
       }
       return { data: null, error: lastErr };
     }
@@ -1211,25 +1211,6 @@ U15: 55=Añadir · 56=Contrastar · 57=Causa/efecto · 58=Tiempo · 59=Ilustrar 
       chatBusy = true;
       document.getElementById('chat-send').disabled = true;
 
-      // Iter B.2 · evaluación en paralelo (no bloquea la respuesta del chat)
-      // Iter B.4 · si la evaluación tiene conceptos U8/U14/U15, dispara evidence al Core
-      if (chatEvalMode) {
-        LC.evaluateMessage(text).then(async result => {
-          if (chatHistory[userIdx]) {
-            chatHistory[userIdx].evaluation = result || null;
-            renderChat();
-          }
-          if (result && LC.enabled) {
-            try {
-              await LC.submitFromEvaluation(result);
-              await lcRefreshAndNotify(); // sidebar + toast + re-render Today si aplica
-            } catch (e) { console.warn('LC eval hook:', e.message); }
-          }
-        }).catch(() => {
-          if (chatHistory[userIdx]) { chatHistory[userIdx].evaluation = null; renderChat(); }
-        });
-      }
-
       try {
         const messages = [{ role: 'system', content: buildChatSystem() }].concat(chatHistory);
         const { data, error } = await invokeChatWithRetry({ messages });
@@ -1241,9 +1222,38 @@ U15: 55=Añadir · 56=Contrastar · 57=Causa/efecto · 58=Tiempo · 59=Ilustrar 
         // Leer la respuesta en voz alta (sin la línea de corrección)
         const spoken = reply.replace(/\[CORRECT\]\s*.+/i, '').trim();
         speakEnglish(spoken);
+
+        // Iter B.6 · evaluación SECUENCIAL (tras la respuesta del chat, no en paralelo)
+        // Reduce concurrencia hacia Groq -> menos rate limit. Fire-and-forget.
+        if (chatEvalMode) {
+          LC.evaluateMessage(text).then(async result => {
+            if (chatHistory[userIdx]) {
+              chatHistory[userIdx].evaluation = result || null;
+              renderChat();
+            }
+            if (result && LC.enabled) {
+              try {
+                await LC.submitFromEvaluation(result);
+                await lcRefreshAndNotify();
+              } catch (e) { console.warn('LC eval hook:', e.message); }
+            }
+          }).catch(() => {
+            if (chatHistory[userIdx]) { chatHistory[userIdx].evaluation = null; renderChat(); }
+          });
+        }
       } catch (e) {
-        chatHistory.push({ role: 'assistant', content: '⚠️ ' + (e.message || e) + ' (¿ya desplegaste la función "chat"?)' });
+        // Iter B.6 · mensaje amigable en error final (tras los 3 intentos del retry)
+        const raw = String(e.message || e);
+        const isRate = /502|503|429|non-2xx|gateway|timeout|rate/i.test(raw);
+        const friendly = isRate
+          ? '⚠️ El servicio de IA está sobrecargado ahora. Espera unos segundos y envía otra vez.'
+          : '⚠️ ' + raw;
+        chatHistory.push({ role: 'assistant', content: friendly });
         renderChat();
+        if (chatEvalMode && chatHistory[userIdx]) {
+          chatHistory[userIdx].evaluation = null;
+          renderChat();
+        }
       } finally {
         chatBusy = false;
         document.getElementById('chat-send').disabled = false;
