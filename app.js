@@ -1065,16 +1065,41 @@ U15: 55=Añadir · 56=Contrastar · 57=Causa/efecto · 58=Tiempo · 59=Ilustrar 
     LC.evaluateMessage = async function(text) {
       if (!text || text.trim().split(/\s+/).length < 3) return null; // skip mensajes muy cortos
       try {
-        const { data, error } = await sb.functions.invoke('chat', {
-          body: { messages: [
+        const { data, error } = await invokeChatWithRetry({
+          messages: [
             { role: 'system', content: CHAT_EVAL_PROMPT },
             { role: 'user',   content: 'Estudiante: "' + text + '"' }
-          ] }
+          ]
         });
         if (error || !data?.reply) return null;
         return _parseEvalJson(data.reply);
       } catch (e) { console.warn('LC.evaluateMessage:', e.message); return null; }
     };
+
+    // Iter B.5 · retry con backoff en errores retryables (502/503/504/429/timeout).
+    // Máx 2 reintentos, wait exponencial: 1s, 2s. Los errores permanentes (400/401)
+    // fallan inmediato. Groq a veces rate-limita bajo concurrencia; el retry lo cubre.
+    async function invokeChatWithRetry(body, maxRetries) {
+      if (maxRetries == null) maxRetries = 2;
+      let lastErr = null;
+      for (let attempt = 0; attempt <= maxRetries; attempt++) {
+        try {
+          const { data, error } = await sb.functions.invoke('chat', { body });
+          if (!error) return { data, error: null };
+          const msg = error.message || '';
+          // Retryable si contiene 502/503/504/429/gateway/timeout/rate/temporarily
+          const retryable = /502|503|504|429|non-2xx|gateway|timeout|rate|temporarily/i.test(msg);
+          if (!retryable || attempt === maxRetries) return { data: null, error };
+          lastErr = error;
+        } catch (e) {
+          if (attempt === maxRetries) throw e;
+          lastErr = e;
+        }
+        // Backoff: 1s primer retry, 2s segundo
+        await new Promise(r => setTimeout(r, 1000 * (attempt + 1)));
+      }
+      return { data: null, error: lastErr };
+    }
 
     // Iter B.4 · registra evidence en el Core a partir del JSON del evaluador.
     // skillCode fijo a 'produce' (id=9): el chat es producción espontánea de lenguaje.
@@ -1207,7 +1232,7 @@ U15: 55=Añadir · 56=Contrastar · 57=Causa/efecto · 58=Tiempo · 59=Ilustrar 
 
       try {
         const messages = [{ role: 'system', content: buildChatSystem() }].concat(chatHistory);
-        const { data, error } = await sb.functions.invoke('chat', { body: { messages } });
+        const { data, error } = await invokeChatWithRetry({ messages });
         if (error) throw new Error(error.message || 'Error en el chat');
         const reply = (data && data.reply ? data.reply : '').trim();
         if (!reply) throw new Error('Respuesta vacía del modelo');
