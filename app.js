@@ -1004,6 +1004,23 @@
           + "'[CORRECT] <the corrected version>' on its own line, then continue the conversation normally. "
           + "If there is no mistake, do not add the correction line.";
       }
+      // Iter B.7 · pedir evaluación pedagógica estructurada al final del mismo mensaje.
+      // Reduce a la mitad las llamadas a Groq (antes: chat + evaluator = 2 requests).
+      if (chatEvalMode) {
+        sys += "\n\nAFTER your normal reply, on the LAST line of your response, append a pedagogical evaluation "
+          + "of the learner's last message using EXACTLY this format (no markdown, no code fences, single line):\n"
+          + '[EVAL] {"errors":[{"type":"grammar|vocab|structure","text":"quoted error","fix":"correction"}],"concepts":[{"cid":<int>,"outcome":"pass|partial|fail"}],"overall":"pass|partial|fail"}\n'
+          + "Rules for [EVAL]:\n"
+          + "- Max 3 errors. Quote the exact error text.\n"
+          + '- "partial" = 1 minor error. "fail" = 2+ errors or severe. "pass" = clean.\n'
+          + "- Max 3 concepts. Only include concepts from the LIMITED list below that ACTUALLY apply.\n"
+          + "- If the learner's message uses higher-level grammar/vocab beyond this list, list errors[] but leave concepts:[].\n"
+          + "- If no concept applies, use concepts:[]. If no errors, use errors:[].\n"
+          + "AVAILABLE CONCEPTS:\n"
+          + "U8: 31=activity verbs (I work/study) 32=WH questions present 33=Yes/No questions present 34=present negative (I don't) 35=Do/Does aux 36=3rd person -s (she works) 37=present affirmative\n"
+          + "U14: 51=AAA verbs (cut/cut/cut) 52=ABA verbs (become/became/become) 53=ABB verbs (buy/bought/bought) 54=ABC verbs (write/wrote/written)\n"
+          + "U15: 55=addition (and,also) 56=contrast (but,however) 57=cause-effect (because,so) 58=time (first,then) 59=illustrate (for example) 60=conclude (finally) 61=nuance (if,actually) 62=discourse (well,you know)";
+      }
       return sys;
     }
 
@@ -1215,31 +1232,32 @@ U15: 55=Añadir · 56=Contrastar · 57=Causa/efecto · 58=Tiempo · 59=Ilustrar 
         const messages = [{ role: 'system', content: buildChatSystem() }].concat(chatHistory);
         const { data, error } = await invokeChatWithRetry({ messages });
         if (error) throw new Error(error.message || 'Error en el chat');
-        const reply = (data && data.reply ? data.reply : '').trim();
+        let reply = (data && data.reply ? data.reply : '').trim();
         if (!reply) throw new Error('Respuesta vacía del modelo');
+
+        // Iter B.7 · extraer [EVAL]{json} de la respuesta (una llamada fusionada)
+        let evaluation = null;
+        if (chatEvalMode) {
+          const evalMatch = reply.match(/\[EVAL\]\s*(\{[\s\S]*?\})\s*$/i);
+          if (evalMatch) {
+            evaluation = _parseEvalJson(evalMatch[1]);
+            reply = reply.replace(/\[EVAL\]\s*\{[\s\S]*?\}\s*$/i, '').trim();
+          }
+          if (chatHistory[userIdx]) chatHistory[userIdx].evaluation = evaluation;
+        }
+
         chatHistory.push({ role: 'assistant', content: reply });
         renderChat();
         // Leer la respuesta en voz alta (sin la línea de corrección)
         const spoken = reply.replace(/\[CORRECT\]\s*.+/i, '').trim();
         speakEnglish(spoken);
 
-        // Iter B.6 · evaluación SECUENCIAL (tras la respuesta del chat, no en paralelo)
-        // Reduce concurrencia hacia Groq -> menos rate limit. Fire-and-forget.
-        if (chatEvalMode) {
-          LC.evaluateMessage(text).then(async result => {
-            if (chatHistory[userIdx]) {
-              chatHistory[userIdx].evaluation = result || null;
-              renderChat();
-            }
-            if (result && LC.enabled) {
-              try {
-                await LC.submitFromEvaluation(result);
-                await lcRefreshAndNotify();
-              } catch (e) { console.warn('LC eval hook:', e.message); }
-            }
-          }).catch(() => {
-            if (chatHistory[userIdx]) { chatHistory[userIdx].evaluation = null; renderChat(); }
-          });
+        // Iter B.7 · si la evaluación tiene conceptos U8/U14/U15, dispara evidence al Core
+        if (evaluation && LC.enabled) {
+          try {
+            await LC.submitFromEvaluation(evaluation);
+            await lcRefreshAndNotify();
+          } catch (e) { console.warn('LC eval hook:', e.message); }
         }
       } catch (e) {
         // Iter B.6 · mensaje amigable en error final (tras los 3 intentos del retry)
