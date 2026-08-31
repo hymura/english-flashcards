@@ -496,7 +496,8 @@
       _lcToastTimer = setTimeout(() => { el.className = 'lc-toast'; }, 3200);
     }
 
-    // Snapshot pre → refreshCoreData → si algún concepto U8 subió de state, notifica el primero.
+    // Snapshot pre → refreshCoreData → si algún concepto (U8/U14/U15) subió de state, notifica el primero.
+    // Iter A.8.1: itera todas las unidades (no solo U8) y re-renderiza Today si es la vista activa.
     async function lcRefreshAndNotify() {
       if (!LC.enabled) return;
       const pre = new Map();
@@ -504,7 +505,12 @@
       await LC.refreshCoreData();
       renderSidebarLCProgress();
       checkNewBadges(false); // post-hook: si desbloqueó, toast dorado
-      for (const cid of LC_U8_IDS) {
+      // Si el user está en el dashboard "Hoy", refrescar el ring/chips/contador.
+      if (document.querySelector('.nav-tab.active')?.getAttribute('data-view') === 'today') {
+        try { renderToday(); } catch (e) { /* silencioso */ }
+      }
+      const allUnitIds = LC_UNITS.flatMap(u => u.ids);
+      for (const cid of allUnitIds) {
         // Comparamos por celda concept:skill que ya existía o que apareció ahora.
         for (const [key, m] of LC.mastery.entries()) {
           if (!key.startsWith(cid + ':')) continue;
