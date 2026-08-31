@@ -334,6 +334,18 @@
               <button class="lc-rec-btn" onclick="practiceRecommendation()">Practicar →</button>
             </div>`;
         }
+
+        // Iter 11 · grid de badges/logros
+        const bs = computeBadgeStatus();
+        html += '<div class="today-section-t">Logros</div>';
+        html += '<div class="lc-badges">' + LC_BADGES.map(b => {
+          const on = bs.unlocked[b.id];
+          const hint = b.hint(bs.s);
+          return `<div class="lc-badge ${on ? 'on' : 'off'}" title="${escapeHtml(hint)}">
+                    <div class="lc-badge-icon">${b.icon}</div>
+                    <div class="lc-badge-name">${escapeHtml(b.name)}</div>
+                  </div>`;
+        }).join('') + '</div>';
       }
 
       if (total > 0) {
@@ -397,13 +409,13 @@
 
     // Toast: pequeña notificación superior. Un timer global evita solapamiento.
     let _lcToastTimer = null;
-    function showLCToast(message) {
+    function showLCToast(message, variant) {
       const el = document.getElementById('lc-toast');
       if (!el) return;
       el.textContent = message;
-      el.classList.add('show');
+      el.className = 'lc-toast show' + (variant === 'gold' ? ' lc-toast-gold' : '');
       clearTimeout(_lcToastTimer);
-      _lcToastTimer = setTimeout(() => el.classList.remove('show'), 2800);
+      _lcToastTimer = setTimeout(() => { el.className = 'lc-toast'; }, 3200);
     }
 
     // Snapshot pre → refreshCoreData → si algún concepto U8 subió de state, notifica el primero.
@@ -413,6 +425,7 @@
       for (const [key, m] of LC.mastery.entries()) pre.set(key, m.state);
       await LC.refreshCoreData();
       renderSidebarLCProgress();
+      checkNewBadges(false); // post-hook: si desbloqueó, toast dorado
       for (const cid of LC_U8_IDS) {
         // Comparamos por celda concept:skill que ya existía o que apareció ahora.
         for (const [key, m] of LC.mastery.entries()) {
@@ -426,6 +439,68 @@
           showLCToast(cName + ' → ' + label);
           return; // solo 1 toast por evento
         }
+      }
+    }
+
+    // ── Learning Core · badges/logros (iter 11) ────────────────────────────
+    // Catálogo derivado de datos existentes (activity_days, LC.mastery, progressMap).
+    // Sin SQL nuevo. Init silencioso: al primer render con localStorage vacío se
+    // marcan los ya cumplidos sin toast; toasts solo para nuevos desbloqueos.
+    const LC_BADGES_KEY = 'lc_badges_notified';
+    const LC_BADGES = [
+      { id: 'first-practice', icon: '🎉', name: 'Bienvenido',       hint: (s) => 'Tu primera práctica' },
+      { id: 'streak-3',       icon: '🔥', name: '3 días seguidos',  hint: (s) => 'Racha ' + s.streak + '/3' },
+      { id: 'streak-7',       icon: '🔥', name: 'Una semana',       hint: (s) => 'Racha ' + s.streak + '/7' },
+      { id: 'streak-30',      icon: '🏆', name: 'Un mes',           hint: (s) => 'Racha ' + s.streak + '/30' },
+      { id: 'concept-1',      icon: '⭐', name: 'Primer concepto',  hint: (s) => s.mastered + '/1 concepto dominado' },
+      { id: 'concept-3',      icon: '🌟', name: 'Buen ritmo',       hint: (s) => s.mastered + '/3 conceptos' },
+      { id: 'concept-7',      icon: '🎓', name: 'U8 completada',    hint: (s) => s.mastered + '/7 conceptos' },
+      { id: 'phrases-50',     icon: '📚', name: '50 frases',        hint: (s) => s.phrases + '/50 estudiadas' }
+    ];
+
+    function computeBadgeStatus() {
+      const streak = (typeof computeStreaks === 'function') ? (computeStreaks().current || 0) : 0;
+      const mastered = LC_U8_IDS.filter(cid => LC.conceptStateAggregate(cid) === 'mastered').length;
+      const phrases = (typeof progressMap !== 'undefined' && progressMap && progressMap.size) || 0;
+      const anyPractice = phrases > 0 || (LC.mastery && LC.mastery.size > 0);
+      const s = { streak, mastered, phrases };
+      const unlocked = {
+        'first-practice': anyPractice,
+        'streak-3': streak >= 3,
+        'streak-7': streak >= 7,
+        'streak-30': streak >= 30,
+        'concept-1': mastered >= 1,
+        'concept-3': mastered >= 3,
+        'concept-7': mastered >= 7,
+        'phrases-50': phrases >= 50
+      };
+      return { s, unlocked };
+    }
+
+    function _getNotifiedBadges() {
+      try { return JSON.parse(localStorage.getItem(LC_BADGES_KEY) || '[]'); } catch (e) { return []; }
+    }
+    function _setNotifiedBadges(arr) {
+      try { localStorage.setItem(LC_BADGES_KEY, JSON.stringify(arr)); } catch (e) {}
+    }
+
+    // Se llama en loadAppData (post-refresh, sin toast si es primera vez con historia)
+    // y en lcRefreshAndNotify (post-hook, con toast si desbloqueó ahora).
+    // silent=true → marca los actualmente unlocked sin toast (init).
+    function checkNewBadges(silent) {
+      if (!LC.enabled) return;
+      const { unlocked } = computeBadgeStatus();
+      let notified = _getNotifiedBadges();
+      const alreadyNotified = new Set(notified);
+      const newlyUnlocked = LC_BADGES.filter(b => unlocked[b.id] && !alreadyNotified.has(b.id));
+      if (newlyUnlocked.length === 0) return;
+      // Persistir todos los nuevos como notificados (single set update)
+      notified = notified.concat(newlyUnlocked.map(b => b.id));
+      _setNotifiedBadges(notified);
+      // Toast solo el primero si NO es init silencioso
+      if (!silent) {
+        const b = newlyUnlocked[0];
+        showLCToast('¡Logro! ' + b.icon + ' ' + b.name, 'gold');
       }
     }
 
@@ -1875,6 +1950,7 @@
         if (LC.enabled) {
           await LC.refreshCoreData().catch(e => console.warn('LC.refreshCoreData:', e));
           renderSidebarLCProgress();
+          checkNewBadges(true); // init silencioso: marca logros ya cumplidos sin toast
           maybeShowLCOnboarding();
         }
         document.getElementById('loading').classList.add('hidden');

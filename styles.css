@@ -1288,6 +1288,40 @@
     @media (prefers-reduced-motion: reduce) {
       .lc-toast { transition: opacity 0.1s ease; transform: translate(-50%, 0); }
     }
+    /* Iter 11: variante dorada para toast de logros */
+    .lc-toast-gold {
+      background: linear-gradient(135deg, #fbbf24, #f59e0b) !important;
+      color: #1a1220 !important;
+      box-shadow: 0 12px 30px rgba(245,158,11,0.4), 0 2px 8px rgba(0,0,0,0.25) !important;
+    }
+
+    /* ── Grid de badges/logros en dashboard "Hoy" (iter 11) ── */
+    .lc-badges {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(96px, 1fr));
+      gap: 0.55rem;
+      margin-bottom: 1rem;
+    }
+    .lc-badge {
+      background: #13132b; border: 1px solid var(--border); border-radius: 12px;
+      padding: 0.75rem 0.5rem; text-align: center;
+      display: flex; flex-direction: column; align-items: center; gap: 0.35rem;
+      transition: transform 0.18s, box-shadow 0.25s, border-color 0.25s;
+      cursor: help;
+    }
+    .lc-badge:hover { transform: translateY(-2px); }
+    .lc-badge-icon { font-size: 1.55rem; line-height: 1; filter: grayscale(1) opacity(0.35); }
+    .lc-badge-name {
+      font-size: 0.68rem; color: var(--text-muted); font-weight: 600;
+      line-height: 1.25; text-align: center;
+    }
+    .lc-badge.on {
+      border-color: rgba(245, 158, 11, 0.4);
+      background: linear-gradient(160deg, rgba(245,158,11,0.12), rgba(251,191,36,0.06));
+      box-shadow: 0 4px 14px rgba(245, 158, 11, 0.12);
+    }
+    .lc-badge.on .lc-badge-icon { filter: none; }
+    .lc-badge.on .lc-badge-name { color: #fde68a; }
 
     /* ── Sidebar · indicador compacto de progreso Core ── */
     .sidebar-lc-progress {
