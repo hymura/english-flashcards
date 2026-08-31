@@ -93,6 +93,33 @@
         if (!links || links.length === 0) return;
         await this.recordEvidence(links.map(l => ({ conceptId: l.concept_id, skillId: sk.id, outcome })));
       },
+      // Iter A.5 · Hooks para verbs y linkers (U14 y U15). Mismo patrón que
+      // submitFromPhrase: resolver skill → buscar content_concept → recordEvidence.
+      // skillCode fijo a 'recognize' porque ambos quizzes son MCQ tipo reconocimiento.
+      async submitFromVerb(verbId, correct) {
+        if (!this.enabled || !currentUser || verbId == null) return;
+        const { data: sk, error: eSk } = await sb.from('lc_skill')
+          .select('id').eq('code', 'recognize').single();
+        if (eSk || !sk) { console.warn('LC.submitFromVerb skill:', eSk && eSk.message); return; }
+        const { data: links, error: eCc } = await sb.from('lc_content_concept')
+          .select('concept_id').eq('content_type', 'verb').eq('content_id', verbId);
+        if (eCc) { console.warn('LC.submitFromVerb lookup:', eCc.message); return; }
+        if (!links || links.length === 0) return;
+        const outcome = correct ? 'pass' : 'fail';
+        await this.recordEvidence(links.map(l => ({ conceptId: l.concept_id, skillId: sk.id, outcome })));
+      },
+      async submitFromLinker(linkerId, correct) {
+        if (!this.enabled || !currentUser || linkerId == null) return;
+        const { data: sk, error: eSk } = await sb.from('lc_skill')
+          .select('id').eq('code', 'recognize').single();
+        if (eSk || !sk) { console.warn('LC.submitFromLinker skill:', eSk && eSk.message); return; }
+        const { data: links, error: eCc } = await sb.from('lc_content_concept')
+          .select('concept_id').eq('content_type', 'linker').eq('content_id', linkerId);
+        if (eCc) { console.warn('LC.submitFromLinker lookup:', eCc.message); return; }
+        if (!links || links.length === 0) return;
+        const outcome = correct ? 'pass' : 'fail';
+        await this.recordEvidence(links.map(l => ({ conceptId: l.concept_id, skillId: sk.id, outcome })));
+      },
       // ── MVP progress · loaders read-only ──────────────────────────
       // Estado en memoria; se re-hidrata al arrancar la sesión y tras writes LC.
       mastery: new Map(),        // "cid:sid" -> {state, score, decayed_score, confidence}
@@ -2690,15 +2717,13 @@
       const { error } = await sb.from('verb_progress').upsert(row, { onConflict: 'user_id,verb_id' });
       if (error) console.warn('saveVerbAnswer:', error.message);
 
-      // ── Learning Core · dual-write mínimo (Fase 1) ────────────────
-      // La escritura de verb_progress de arriba es AUTORITATIVA y ya ocurrió.
-      // Esto es aditivo y best-effort: sólo corre si LC.enabled y si el verbo
-      // está mapeado a un ejercicio del Core (mapeo real llega en Fase 2/3).
+      // ── Learning Core · hook activo (Batch A · iter A.5) ─────────
+      // Ruta evidence-only vía LC.submitFromVerb: resuelve verb → concepto
+      // U14 (past-simple-irregular-XXX) y registra outcome. Fire-and-forget.
       if (LC.enabled) {
-        try {
-          const exId = (window.LC_verbExercise || {})[verbId];   // verbo → ejercicio del Core
-          if (exId != null) await LC.submitAttempt(exId, { isCorrect: wasCorrect });
-        } catch (e) { console.warn('LC dual-write (verbos):', e); }
+        LC.submitFromVerb(verbId, wasCorrect)
+          .then(() => lcRefreshAndNotify())
+          .catch(function(e) { console.warn('LC dual-write (verbos):', e.message); });
       }
     }
 
@@ -3237,6 +3262,15 @@
       const { error } = await sb.from('linker_progress')
         .upsert(row, { onConflict: 'user_id,linker_id' });
       if (error) console.warn('saveLinkerAnswer:', error.message);
+
+      // ── Learning Core · hook activo (Batch A · iter A.5) ─────────
+      // Ruta evidence-only vía LC.submitFromLinker: resuelve linker → concepto
+      // U15 (linker-XXX) y registra outcome. Fire-and-forget.
+      if (LC.enabled) {
+        LC.submitFromLinker(linkerId, wasCorrect)
+          .then(() => lcRefreshAndNotify())
+          .catch(function(e) { console.warn('LC dual-write (linkers):', e.message); });
+      }
     }
 
     // Calcula estadísticas: qué domina y qué debe reforzar
