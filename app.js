@@ -964,13 +964,16 @@
     // ║  CONVERSACIÓN IA (chat con Groq/Llama)                   ║
     // ╚══════════════════════════════════════════════════════════╝
     let chatHistory = [];       // [{role:'user'|'assistant', content, evaluation?, evalOpen?}]
-    let chatCorrect = true;
     let chatBusy = false;
     let chatStarted = false;
-    // Iter B.2 · modo evaluación (persistente en localStorage)
-    let chatEvalMode = (function() {
-      try { return localStorage.getItem('chat_eval_mode') === '1'; } catch (e) { return false; }
+    // Iter B.8 · toggle único "Feedback" que combina corrección inline + evaluación
+    // pedagógica + evidencia al Core. Sustituye a chatCorrect y chatEvalMode.
+    let chatFeedback = (function() {
+      try { return localStorage.getItem('chat_feedback') !== '0'; } catch (e) { return true; } // default ON
     })();
+    // Compat: mantener referencias (deprecated pero podrían usarse en callbacks externos)
+    let chatCorrect = chatFeedback;
+    let chatEvalMode = chatFeedback;
 
     const CHAT_OPENERS = {
       free:       "Hi! 😊 I'm here to chat with you in English. What would you like to talk about today?",
@@ -999,14 +1002,14 @@
         + CHAT_SCENARIO_ROLE[scen] + " " + CHAT_LEVEL[level] + " "
         + "Keep every reply SHORT (1-3 sentences) and ALWAYS finish with a question to keep the conversation going. "
         + "Reply in English. Be natural and friendly.";
-      if (chatCorrect) {
+      if (chatFeedback) {
         sys += " If the learner's last message has an English mistake, begin your reply with one short correction line in this exact format: "
           + "'[CORRECT] <the corrected version>' on its own line, then continue the conversation normally. "
           + "If there is no mistake, do not add the correction line.";
       }
       // Iter B.7 · pedir evaluación pedagógica estructurada al final del mismo mensaje.
       // Reduce a la mitad las llamadas a Groq (antes: chat + evaluator = 2 requests).
-      if (chatEvalMode) {
+      if (chatFeedback) {
         sys += "\n\nAFTER your normal reply, on the LAST line of your response, append a pedagogical evaluation "
           + "of the learner's last message using EXACTLY this format (no markdown, no code fences, single line):\n"
           + '[EVAL] {"errors":[{"type":"grammar|vocab|structure","text":"quoted error","fix":"correction"}],"concepts":[{"cid":<int>,"outcome":"pass|partial|fail"}],"overall":"pass|partial|fail"}\n'
@@ -1025,9 +1028,9 @@
     }
 
     function loadChat() {
-      // Iter B.2: refleja el estado persistido del toggle "🎓 Evalúa"
-      const evalToggle = document.getElementById('chat-eval-toggle');
-      if (evalToggle) evalToggle.classList.toggle('on', chatEvalMode);
+      // Iter B.8: refleja el estado persistido del toggle "🎓 Feedback"
+      const fbToggle = document.getElementById('chat-feedback-toggle');
+      if (fbToggle) fbToggle.classList.toggle('on', chatFeedback);
       if (!chatStarted) newChat();
     }
 
@@ -1041,17 +1044,17 @@
       document.getElementById('chat-input').value = '';
     }
 
-    function toggleChatCorrect() {
-      chatCorrect = !chatCorrect;
-      document.getElementById('chat-correct-toggle').classList.toggle('on', chatCorrect);
+    // Iter B.8 · toggle único "🎓 Feedback" (correction inline + panel evaluación + evidencia Core)
+    function toggleChatFeedback() {
+      chatFeedback = !chatFeedback;
+      chatCorrect = chatFeedback;   // compat
+      chatEvalMode = chatFeedback;  // compat
+      document.getElementById('chat-feedback-toggle').classList.toggle('on', chatFeedback);
+      try { localStorage.setItem('chat_feedback', chatFeedback ? '1' : '0'); } catch (e) {}
     }
-
-    // Iter B.2 · toggle "🎓 Evalúa"
-    function toggleChatEvalMode() {
-      chatEvalMode = !chatEvalMode;
-      document.getElementById('chat-eval-toggle').classList.toggle('on', chatEvalMode);
-      try { localStorage.setItem('chat_eval_mode', chatEvalMode ? '1' : '0'); } catch (e) {}
-    }
+    // Compat: si algo llama las funciones viejas, redirige al nuevo toggle
+    function toggleChatCorrect()   { toggleChatFeedback(); }
+    function toggleChatEvalMode()  { toggleChatFeedback(); }
 
     // Iter B.2 · abre/cierra el panel de evaluación de un mensaje
     function toggleChatEvalPanel(idx) {
@@ -1223,7 +1226,7 @@ U15: 55=Añadir · 56=Contrastar · 57=Causa/efecto · 58=Tiempo · 59=Ilustrar 
       if (!text) return;
       input.value = ''; autoGrowChat(input);
       const userIdx = chatHistory.length;
-      chatHistory.push({ role: 'user', content: text, evaluation: chatEvalMode ? 'pending' : undefined });
+      chatHistory.push({ role: 'user', content: text, evaluation: chatFeedback ? 'pending' : undefined });
       renderChat(true);
       chatBusy = true;
       document.getElementById('chat-send').disabled = true;
@@ -1237,7 +1240,7 @@ U15: 55=Añadir · 56=Contrastar · 57=Causa/efecto · 58=Tiempo · 59=Ilustrar 
 
         // Iter B.7 · extraer [EVAL]{json} de la respuesta (una llamada fusionada)
         let evaluation = null;
-        if (chatEvalMode) {
+        if (chatFeedback) {
           const evalMatch = reply.match(/\[EVAL\]\s*(\{[\s\S]*?\})\s*$/i);
           if (evalMatch) {
             evaluation = _parseEvalJson(evalMatch[1]);
@@ -1268,7 +1271,7 @@ U15: 55=Añadir · 56=Contrastar · 57=Causa/efecto · 58=Tiempo · 59=Ilustrar 
           : '⚠️ ' + raw;
         chatHistory.push({ role: 'assistant', content: friendly });
         renderChat();
-        if (chatEvalMode && chatHistory[userIdx]) {
+        if (chatFeedback && chatHistory[userIdx]) {
           chatHistory[userIdx].evaluation = null;
           renderChat();
         }
