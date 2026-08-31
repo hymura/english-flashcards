@@ -2722,7 +2722,13 @@
     function buildVerbTypePills() {
       const el = document.getElementById('verb-types');
       if (!el) return;
-      el.innerHTML = VERB_TYPES.map(([t, label]) => {
+      // Iter A.7.1: si LC.enabled y hay chips concepto U14 disponibles, se ocultan
+      // los 4 sub-tipos legacy (A-A-A/A-B-A/A-B-B/A-B-C) porque son 1:1 con los chips
+      // morados. Se conserva solo "Todos". Guest ve la barra legacy completa.
+      const hasCoreChips = LC.enabled && LC.contentByConcept.size > 0 &&
+        LC_U14_IDS.some(cid => (LC.contentByConcept.get(cid)?.verbs || []).length > 0);
+      const types = hasCoreChips ? [['all', 'Todos']] : VERB_TYPES;
+      el.innerHTML = types.map(([t, label]) => {
         const n = t === 'all' ? verbsData.length : verbsData.filter(v => v.pattern_type === t).length;
         return `<div class="cat-chip ${activeVerbType === t ? 'active' : ''}" data-vt="${t}" onclick="filterVerbType('${t}', this)"
                   ${t !== 'all' ? `title="${VERB_TYPE_DESC[t] || ''}"` : ''}>${label} <span class="cat-count">${n}</span></div>`;
