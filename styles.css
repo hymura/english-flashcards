@@ -1340,6 +1340,44 @@
       border-radius: 99px; transition: width 0.6s ease;
     }
     .sidebar-lc-progress .lc-mini-num { font-variant-numeric: tabular-nums; }
+    /* Iter A.6 · sidebar 3 mini-barras por unidad */
+    .sidebar-lc-progress .lc-mini-unit {
+      display: inline-flex; align-items: center; gap: 0.3rem;
+    }
+    .sidebar-lc-progress.on { flex-wrap: wrap; gap: 0.35rem 0.55rem; }
+    .lc-mini-num-u8  { color: #6ee7b7; }
+    .lc-mini-num-u14 { color: #fb7185; }
+    .lc-mini-num-u15 { color: #5eead4; }
+    .lc-mini-fill-u8  { background: linear-gradient(90deg, #10b981, #34d399); }
+    .lc-mini-fill-u14 { background: linear-gradient(90deg, #f43f5e, #fb7185); }
+    .lc-mini-fill-u15 { background: linear-gradient(90deg, #14b8a6, #2dd4bf); }
+
+    /* Iter A.6 · pestañas U8/U14/U15 en el ring de dashboard */
+    .lc-course-tabs {
+      display: inline-flex; gap: 0.15rem;
+      background: rgba(255,255,255,0.04);
+      padding: 0.2rem; border-radius: 8px;
+      margin-bottom: 0.7rem;
+    }
+    .lc-course-tab {
+      padding: 0.28rem 0.7rem;
+      font-family: 'IBM Plex Mono', 'JetBrains Mono', monospace;
+      font-size: 0.7rem; font-weight: 700;
+      color: var(--text-muted); cursor: pointer;
+      border-radius: 5px;
+      transition: color 0.15s, background 0.15s;
+    }
+    .lc-course-tab:hover { color: var(--text); }
+    .lc-course-tab.active.tab-u8  { background: rgba(16,185,129,0.18);  color: #6ee7b7; }
+    .lc-course-tab.active.tab-u14 { background: rgba(244,63,94,0.18);   color: #fda4af; }
+    .lc-course-tab.active.tab-u15 { background: rgba(20,184,166,0.18);  color: #5eead4; }
+    .lc-course-count-total {
+      color: var(--text-muted); font-weight: 500; font-size: 0.7rem;
+    }
+    /* Fills de la barra según unidad activa */
+    .lc-course-fill.fill-u8  { background: linear-gradient(90deg, #10b981, #34d399); }
+    .lc-course-fill.fill-u14 { background: linear-gradient(90deg, #f43f5e, #fb7185); }
+    .lc-course-fill.fill-u15 { background: linear-gradient(90deg, #14b8a6, #2dd4bf); }
 
     /* ── Chips de concepto U8 en la barra de flashcards ── */
     .cat-sep {

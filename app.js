@@ -326,21 +326,28 @@
 
       // ── Learning Core · sección MVP (ring + chips + recomendación) ─
       if (LC.enabled && LC.conceptNames.size > 0) {
-        const conceptStates = LC_U8_IDS.map(cid => ({
+        const activeUnit = LC_UNITS.find(u => u.code === _lcActiveUnitTab) || LC_UNITS[0];
+        const conceptStates = activeUnit.ids.map(cid => ({
           cid,
           state: LC.conceptStateAggregate(cid),
           name: LC_SHORT_NAMES[cid] || LC.conceptNames.get(cid)?.name || ('C' + cid)
         }));
         const mastered = conceptStates.filter(s => s.state === 'mastered').length;
-        const pct = Math.round((mastered / LC_U8_IDS.length) * 100);
+        const pct = Math.round((mastered / activeUnit.ids.length) * 100);
+        // Total global (suma mastered de todas las unidades)
+        const allIds = LC_UNITS.flatMap(u => u.ids);
+        const globalMastered = allIds.filter(cid => LC.conceptStateAggregate(cid) === 'mastered').length;
 
         html += `
-          <div class="lc-course">
+          <div class="lc-course lc-course-${activeUnit.color}">
             <div class="lc-course-head">
-              <span class="lc-course-title">📖 Tu curso · Presente simple</span>
-              <span class="lc-course-count">${mastered} / ${LC_U8_IDS.length} dominados</span>
+              <span class="lc-course-title">📖 Tu curso · ${escapeHtml(activeUnit.title)}</span>
+              <span class="lc-course-count">${mastered} / ${activeUnit.ids.length} · <span class="lc-course-count-total">${globalMastered} / ${allIds.length} total</span></span>
             </div>
-            <div class="lc-course-bar"><div class="lc-course-fill" style="width:${pct}%"></div></div>
+            <div class="lc-course-tabs">
+              ${LC_UNITS.map(u => `<span class="lc-course-tab tab-${u.color}${u.code===_lcActiveUnitTab?' active':''}" onclick="switchUnitTab('${u.code}')">${u.code}</span>`).join('')}
+            </div>
+            <div class="lc-course-bar"><div class="lc-course-fill fill-${activeUnit.color}" style="width:${pct}%"></div></div>
             <div class="lc-course-chips">
               ${conceptStates.map(s => `<span class="lc-chip lc-chip-${s.state}" title="${LC_STATE_LABEL[s.state]}">${escapeHtml(s.name)}</span>`).join('')}
             </div>
@@ -420,19 +427,47 @@
 
     // Lanza el repaso de un tipo, filtrado a los items vencidos
     // ── Learning Core · constantes UI compartidas (renderToday + toast) ────
-    const LC_U8_IDS = [31, 32, 33, 34, 35, 36, 37];
+    const LC_U8_IDS  = [31, 32, 33, 34, 35, 36, 37];
+    const LC_U14_IDS = [51, 52, 53, 54];              // past simple irregular (aaa/aba/abb/abc)
+    const LC_U15_IDS = [55, 56, 57, 58, 59, 60, 61, 62]; // linkers 8 funciones
+    const LC_UNITS = [
+      { code: 'U8',  title: 'Presente simple', color: 'u8',  ids: LC_U8_IDS  },
+      { code: 'U14', title: 'Past Simple',     color: 'u14', ids: LC_U14_IDS },
+      { code: 'U15', title: 'Cohesión',        color: 'u15', ids: LC_U15_IDS }
+    ];
     const LC_SHORT_NAMES = {
+      // U8
       31: 'Verbos de actividad',
       32: 'WH preguntas',
       33: 'Sí/No preguntas',
       34: 'Negativas',
       35: 'Do / Does',
       36: '3ª persona -s',
-      37: 'Afirmativas'
+      37: 'Afirmativas',
+      // U14 (past simple irregular por pattern_type)
+      51: 'Verbos A-A-A',
+      52: 'Verbos A-B-A',
+      53: 'Verbos A-B-B',
+      54: 'Verbos A-B-C',
+      // U15 (linkers por función)
+      55: 'Añadir',
+      56: 'Contrastar',
+      57: 'Causa / efecto',
+      58: 'Tiempo',
+      59: 'Ilustrar',
+      60: 'Cerrar',
+      61: 'Matizar',
+      62: 'Discurso'
     };
     const LC_STATE_LABEL = { unseen: 'Sin ver', learning: 'Aprendiendo', practiced: 'Practicando', rusty: 'Repasar', mastered: 'Dominado' };
     // Orden de "avance": mayor índice = mejor state. Solo notificamos upgrades.
     const LC_STATE_ORDER = { unseen: 0, rusty: 1, learning: 2, practiced: 3, mastered: 4 };
+    // Iter A.6 · pestaña activa del ring en dashboard "Hoy"
+    let _lcActiveUnitTab = 'U8';
+    function switchUnitTab(code) {
+      _lcActiveUnitTab = code;
+      renderToday();
+    }
 
     // Toast: pequeña notificación superior. Un timer global evita solapamiento.
     let _lcToastTimer = null;
@@ -531,7 +566,7 @@
       }
     }
 
-    // Sidebar: N/7 conceptos dominados + mini-bar. Solo si LC.enabled y datos hidratados.
+    // Sidebar: 3 mini-barras compactas (una por unidad activa). Solo si LC.enabled.
     function renderSidebarLCProgress() {
       const el = document.getElementById('sidebar-lc-progress');
       if (!el) return;
@@ -540,12 +575,15 @@
         el.innerHTML = '';
         return;
       }
-      const mastered = LC_U8_IDS.filter(cid => LC.conceptStateAggregate(cid) === 'mastered').length;
-      const pct = Math.round((mastered / LC_U8_IDS.length) * 100);
       el.classList.add('on');
-      el.innerHTML =
-        '<span class="lc-mini-num">' + mastered + '/' + LC_U8_IDS.length + '</span>' +
-        '<span class="lc-mini-bar"><span class="lc-mini-fill" style="width:' + pct + '%"></span></span>';
+      el.innerHTML = LC_UNITS.map(u => {
+        const mastered = u.ids.filter(cid => LC.conceptStateAggregate(cid) === 'mastered').length;
+        const pct = Math.round((mastered / u.ids.length) * 100);
+        return '<span class="lc-mini-unit">' +
+                 '<span class="lc-mini-num lc-mini-num-' + u.color + '">' + mastered + '/' + u.ids.length + '</span>' +
+                 '<span class="lc-mini-bar"><span class="lc-mini-fill lc-mini-fill-' + u.color + '" style="width:' + pct + '%"></span></span>' +
+               '</span>';
+      }).join('');
     }
 
     // ── Onboarding LC · 3 slides al primer login autenticado ──────────────
