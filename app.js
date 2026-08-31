@@ -2905,14 +2905,50 @@
           cats.map(c => `<option value="${c}">${c}</option>`).join('');
         shadowCatsBuilt = true;
       }
+      renderShadowConceptChips();
       if (shadowDeck.length === 0) restartShadow();
+    }
+
+    // Iter 10 · barra de chips concepto en Shadowing (mismo patrón que flashcards iter 7)
+    let activeShadowConcept = null;
+    function renderShadowConceptChips() {
+      const bar = document.getElementById('shadow-concept-chips');
+      if (!bar) return;
+      if (!LC.enabled || LC.contentByConcept.size === 0) { bar.innerHTML = ''; return; }
+      const chips = LC_U8_IDS
+        .map(cid => ({ cid, count: (LC.contentByConcept.get(cid)?.phrases || []).length }))
+        .filter(c => c.count > 0);
+      if (chips.length === 0) { bar.innerHTML = ''; return; }
+      bar.innerHTML = chips.map(c => {
+        const name = LC_SHORT_NAMES[c.cid] || LC.conceptNames.get(c.cid)?.name || ('C' + c.cid);
+        const active = activeShadowConcept === c.cid ? ' active' : '';
+        return `<div class="cat-chip cat-chip-concept${active}" data-shadow-concept="${c.cid}" onclick="selectShadowConcept(${c.cid}, this)">
+                  ✨ ${escapeHtml(name)} <span class="cat-count">${c.count}</span>
+                </div>`;
+      }).join('');
+    }
+
+    function selectShadowConcept(cid, el) {
+      activeShadowConcept = cid;
+      // Reset del select a "all" para que la vista muestre "estoy filtrando por concepto"
+      const sel = document.getElementById('shadow-cat');
+      if (sel) sel.value = 'all';
+      // Visual: activar solo este chip
+      document.querySelectorAll('#shadow-concept-chips .cat-chip-concept').forEach(c => c.classList.remove('active'));
+      el.classList.add('active');
+      const ids = new Set((LC.contentByConcept.get(cid)?.phrases) || []);
+      restartShadow(allPhrases.filter(p => ids.has(p.id)));
     }
 
     function restartShadow(explicitList) {
       let base;
       if (explicitList && explicitList.length) {
+        // Lista custom (chip concepto, reviewDue, etc.) — no tocar activeShadowConcept
         base = explicitList;
       } else {
+        // Llamada desde el select o programática sin lista → reset del filtro concepto
+        activeShadowConcept = null;
+        document.querySelectorAll('#shadow-concept-chips .cat-chip-concept.active').forEach(c => c.classList.remove('active'));
         const cat = document.getElementById('shadow-cat').value || 'all';
         base = (cat === 'all') ? allPhrases : allPhrases.filter(p => p.category === cat);
       }

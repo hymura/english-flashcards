@@ -1327,6 +1327,18 @@
       border-color: transparent; color: #fff;
       box-shadow: 0 4px 14px rgba(168, 85, 247, 0.35);
     }
+    /* Iter 10: barra de chips concepto en Shadowing (reutiliza .cat-chip-concept) */
+    .shadow-concept-bar {
+      display: flex; flex-wrap: wrap; gap: 0.4rem;
+      margin: 0.4rem 0 1rem;
+    }
+    .shadow-concept-bar:empty { display: none; }
+    .shadow-concept-bar .cat-chip {
+      font-size: 0.78rem; padding: 0.35rem 0.75rem;
+      border-radius: 99px; cursor: pointer;
+      border: 1px solid var(--border);
+      user-select: none;
+    }
 
     /* ── Onboarding LC (primer login) ── */
     .lc-onb {
