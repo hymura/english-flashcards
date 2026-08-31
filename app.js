@@ -963,10 +963,14 @@
     // ╔══════════════════════════════════════════════════════════╗
     // ║  CONVERSACIÓN IA (chat con Groq/Llama)                   ║
     // ╚══════════════════════════════════════════════════════════╝
-    let chatHistory = [];       // [{role:'user'|'assistant', content}]
+    let chatHistory = [];       // [{role:'user'|'assistant', content, evaluation?, evalOpen?}]
     let chatCorrect = true;
     let chatBusy = false;
     let chatStarted = false;
+    // Iter B.2 · modo evaluación (persistente en localStorage)
+    let chatEvalMode = (function() {
+      try { return localStorage.getItem('chat_eval_mode') === '1'; } catch (e) { return false; }
+    })();
 
     const CHAT_OPENERS = {
       free:       "Hi! 😊 I'm here to chat with you in English. What would you like to talk about today?",
@@ -1004,6 +1008,9 @@
     }
 
     function loadChat() {
+      // Iter B.2: refleja el estado persistido del toggle "🎓 Evalúa"
+      const evalToggle = document.getElementById('chat-eval-toggle');
+      if (evalToggle) evalToggle.classList.toggle('on', chatEvalMode);
       if (!chatStarted) newChat();
     }
 
@@ -1022,11 +1029,106 @@
       document.getElementById('chat-correct-toggle').classList.toggle('on', chatCorrect);
     }
 
+    // Iter B.2 · toggle "🎓 Evalúa"
+    function toggleChatEvalMode() {
+      chatEvalMode = !chatEvalMode;
+      document.getElementById('chat-eval-toggle').classList.toggle('on', chatEvalMode);
+      try { localStorage.setItem('chat_eval_mode', chatEvalMode ? '1' : '0'); } catch (e) {}
+    }
+
+    // Iter B.2 · abre/cierra el panel de evaluación de un mensaje
+    function toggleChatEvalPanel(idx) {
+      if (!chatHistory[idx]) return;
+      chatHistory[idx].evalOpen = !chatHistory[idx].evalOpen;
+      renderChat();
+    }
+
+    // Iter B.2 · LC.evaluateMessage: llama Groq, parseo defensivo, devuelve {errors, concepts, overall} o null
+    const CHAT_EVAL_PROMPT = `Eres un evaluador pedagógico de inglés de cualquier nivel (A1 hasta C1). Analiza SOLO el enunciado del estudiante y responde ÚNICAMENTE con JSON, sin texto extra.
+
+Formato:
+{"errors":[{"type":"grammar|vocab|structure","text":"cita textual","fix":"corrección"}],
+ "concepts":[{"cid":<int>,"outcome":"pass|partial|fail"}],
+ "overall":"pass|partial|fail"}
+
+Reglas:
+- Máx 3 errores. Cita textual el error.
+- "partial" = 1 error menor. "fail" = 2+ errores o error grave. "pass" = sin errores.
+- Máx 3 conceptos, solo los que aplican al enunciado.
+- Si detectas errores en gramática/vocabulario más avanzado que los conceptos listados abajo, repórtalos en errors[] pero devuelve concepts:[] (no forzar mapeo si no aplica).
+
+CONCEPTOS DISPONIBLES (solo estos; si el enunciado no toca ninguno, concepts:[]):
+U8: 31=Verbos actividad · 32=WH preguntas presente · 33=Sí/No preguntas presente · 34=Negativo presente · 35=Do/Does aux · 36=3a persona -s · 37=Afirmativo presente
+U14: 51=Verbos AAA · 52=Verbos ABA · 53=Verbos ABB · 54=Verbos ABC
+U15: 55=Añadir · 56=Contrastar · 57=Causa/efecto · 58=Tiempo · 59=Ilustrar · 60=Cerrar · 61=Matizar · 62=Discurso`;
+
+    LC.evaluateMessage = async function(text) {
+      if (!text || text.trim().split(/\s+/).length < 3) return null; // skip mensajes muy cortos
+      try {
+        const { data, error } = await sb.functions.invoke('chat', {
+          body: { messages: [
+            { role: 'system', content: CHAT_EVAL_PROMPT },
+            { role: 'user',   content: 'Estudiante: "' + text + '"' }
+          ] }
+        });
+        if (error || !data?.reply) return null;
+        return _parseEvalJson(data.reply);
+      } catch (e) { console.warn('LC.evaluateMessage:', e.message); return null; }
+    };
+
+    // Parseo defensivo: JSON.parse directo → substring {..} → cierre forzado. Nunca lanza.
+    function _parseEvalJson(raw) {
+      const cleanFromCodeFence = raw.replace(/^```(?:json)?\s*|\s*```$/gi, '').trim();
+      try { return JSON.parse(cleanFromCodeFence); } catch (e) {}
+      // Extraer entre primer '{' y último '}' si están
+      const i = cleanFromCodeFence.indexOf('{');
+      const j = cleanFromCodeFence.lastIndexOf('}');
+      if (i >= 0 && j > i) {
+        try { return JSON.parse(cleanFromCodeFence.substring(i, j + 1)); } catch (e) {}
+      }
+      // Forzar cierre: si empieza con { pero no hay '}' final, añadir uno
+      if (i >= 0 && j < i) {
+        try { return JSON.parse(cleanFromCodeFence.substring(i) + '}'); } catch (e) {}
+      }
+      return null;
+    }
+
     function renderChat(typing) {
       const win = document.getElementById('chat-window');
       const spk = t => (t || '').replace(/'/g, "\\'").replace(/"/g, '&quot;');
-      let html = chatHistory.map(m => {
-        if (m.role === 'user') return `<div class="msg msg-user">${escapeHtml(m.content)}</div>`;
+      let html = chatHistory.map((m, i) => {
+        if (m.role === 'user') {
+          // Iter B.2: chip + panel de evaluación si el mensaje tiene evaluation
+          let evalHtml = '';
+          if (m.evaluation === 'pending') {
+            evalHtml = `<div class="msg-eval-chip pending" title="Evaluando...">🎓 …</div>`;
+          } else if (m.evaluation) {
+            const e = m.evaluation;
+            const nErr = (e.errors || []).length;
+            const nCon = (e.concepts || []).length;
+            const chipLabel = nErr > 0 ? `🎓 ${nErr} error${nErr === 1 ? '' : 'es'}` : '🎓 ✓';
+            const chipClass = e.overall === 'pass' ? 'pass' : (e.overall === 'fail' ? 'fail' : 'partial');
+            evalHtml = `<div class="msg-eval-chip ${chipClass}" onclick="toggleChatEvalPanel(${i})">${chipLabel}</div>`;
+            if (m.evalOpen) {
+              const errorsHtml = (e.errors || []).map(er =>
+                `<div class="eval-error"><span class="eval-error-type">${escapeHtml(er.type || '')}</span> "<em>${escapeHtml(er.text || '')}</em>" → <strong>${escapeHtml(er.fix || '')}</strong></div>`
+              ).join('');
+              const conceptsHtml = (e.concepts || []).map(c => {
+                const name = LC_SHORT_NAMES[c.cid] || 'Concepto ' + c.cid;
+                return `<span class="eval-concept eval-outcome-${c.outcome}">${escapeHtml(name)}</span>`;
+              }).join('');
+              const emptyMsg = (e.errors || []).length === 0 ? '<div class="eval-none">Sin errores en este mensaje ✨</div>' : '';
+              evalHtml += `<div class="msg-eval-panel">
+                ${emptyMsg}${errorsHtml}
+                ${conceptsHtml ? '<div class="eval-concepts">' + conceptsHtml + '</div>' : ''}
+              </div>`;
+            }
+          }
+          return `<div class="msg-user-wrap">
+                    <div class="msg msg-user">${escapeHtml(m.content)}</div>
+                    ${evalHtml}
+                  </div>`;
+        }
         // assistant: separar corrección si viene
         let corr = '', text = m.content;
         const cm = text.match(/\[CORRECT\]\s*(.+)/i);
@@ -1061,10 +1163,23 @@
       const text = input.value.trim();
       if (!text) return;
       input.value = ''; autoGrowChat(input);
-      chatHistory.push({ role: 'user', content: text });
+      const userIdx = chatHistory.length;
+      chatHistory.push({ role: 'user', content: text, evaluation: chatEvalMode ? 'pending' : undefined });
       renderChat(true);
       chatBusy = true;
       document.getElementById('chat-send').disabled = true;
+
+      // Iter B.2 · evaluación en paralelo (no bloquea la respuesta del chat)
+      if (chatEvalMode) {
+        LC.evaluateMessage(text).then(result => {
+          if (chatHistory[userIdx]) {
+            chatHistory[userIdx].evaluation = result || null;
+            renderChat();
+          }
+        }).catch(() => {
+          if (chatHistory[userIdx]) { chatHistory[userIdx].evaluation = null; renderChat(); }
+        });
+      }
 
       try {
         const messages = [{ role: 'system', content: buildChatSystem() }].concat(chatHistory);

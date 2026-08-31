@@ -1123,6 +1123,43 @@
     .msg { max-width: 82%; padding: 0.65rem 0.9rem; border-radius: 16px; font-size: 0.92rem; line-height: 1.5; animation: fadeIn 0.3s ease; }
     .msg-ai   { align-self: flex-start; background: #1e1e3a; border: 1px solid var(--border); border-bottom-left-radius: 5px; color: #f1f5f9; }
     .msg-user { align-self: flex-end; background: linear-gradient(135deg,#7c3aed,#a855f7); color: #fff; border-bottom-right-radius: 5px; }
+    /* Iter B.2 · wrap del mensaje user + chip evaluación + panel */
+    .msg-user-wrap { display: flex; flex-direction: column; align-items: flex-end; gap: 0.25rem; max-width: 82%; align-self: flex-end; }
+    .msg-user-wrap .msg-user { max-width: 100%; }
+    .msg-eval-chip {
+      font-size: 0.7rem; font-weight: 700; padding: 0.2rem 0.55rem;
+      border-radius: 99px; cursor: pointer; user-select: none;
+      background: rgba(255,255,255,0.06); color: var(--text-muted);
+      border: 1px solid var(--border);
+      transition: transform 0.15s, background 0.15s;
+    }
+    .msg-eval-chip:hover { transform: translateY(-1px); }
+    .msg-eval-chip.pending { opacity: 0.6; cursor: default; }
+    .msg-eval-chip.pass { background: rgba(16,185,129,0.14); color: #6ee7b7; border-color: rgba(16,185,129,0.4); }
+    .msg-eval-chip.partial { background: rgba(251,146,60,0.14); color: #fbbf24; border-color: rgba(251,146,60,0.4); }
+    .msg-eval-chip.fail { background: rgba(239,68,68,0.14); color: #fca5a5; border-color: rgba(239,68,68,0.4); }
+    .msg-eval-panel {
+      background: #12122a; border: 1px solid var(--border); border-radius: 12px;
+      padding: 0.65rem 0.85rem; font-size: 0.82rem; color: var(--text);
+      width: 100%; max-width: 100%; animation: fadeIn 0.2s ease;
+    }
+    .eval-error { padding: 0.3rem 0; border-bottom: 1px solid rgba(255,255,255,0.05); font-size: 0.8rem; line-height: 1.5; }
+    .eval-error:last-child { border-bottom: none; }
+    .eval-error-type {
+      font-size: 0.65rem; text-transform: uppercase; letter-spacing: 0.05em;
+      background: rgba(251,146,60,0.14); color: #fbbf24;
+      padding: 0.1em 0.4em; border-radius: 4px; margin-right: 0.3rem; font-weight: 700;
+    }
+    .eval-error em { color: #fca5a5; font-style: italic; }
+    .eval-error strong { color: #6ee7b7; font-weight: 700; }
+    .eval-none { color: #6ee7b7; font-size: 0.82rem; text-align: center; padding: 0.35rem 0; }
+    .eval-concepts { display: flex; flex-wrap: wrap; gap: 0.25rem; margin-top: 0.55rem; padding-top: 0.5rem; border-top: 1px solid rgba(255,255,255,0.05); }
+    .eval-concept {
+      font-size: 0.68rem; padding: 0.18rem 0.5rem; border-radius: 99px; font-weight: 600;
+    }
+    .eval-outcome-pass    { background: rgba(16,185,129,0.14);  color: #6ee7b7; border: 1px solid rgba(16,185,129,0.4); }
+    .eval-outcome-partial { background: rgba(251,146,60,0.14);  color: #fbbf24; border: 1px solid rgba(251,146,60,0.4); }
+    .eval-outcome-fail    { background: rgba(239,68,68,0.14);   color: #fca5a5; border: 1px solid rgba(239,68,68,0.4); }
     .msg-ai .msg-correct {
       display: block; background: rgba(251,191,36,0.12); border: 1px solid rgba(251,191,36,0.3); color: #fde68a;
       border-radius: 8px; padding: 0.35rem 0.55rem; margin-bottom: 0.45rem; font-size: 0.82rem;
