@@ -381,7 +381,7 @@
             </div>
             <div class="lc-course-bar"><div class="lc-course-fill fill-${activeUnit.color}" style="width:${pct}%"></div></div>
             <div class="lc-course-chips">
-              ${conceptStates.map(s => `<span class="lc-chip lc-chip-${s.state}" title="${LC_STATE_LABEL[s.state]}">${escapeHtml(s.name)}</span>`).join('')}
+              ${conceptStates.map(s => `<span class="lc-chip lc-chip-${s.state} lc-chip-clickable" title="Practicar · ${LC_STATE_LABEL[s.state]}" onclick="practiceConcept(${s.cid})">${escapeHtml(s.name)}</span>`).join('')}
             </div>
           </div>`;
 
@@ -708,6 +708,44 @@
     function dismissLCOnboarding() {
       const overlay = document.getElementById('lc-onboarding');
       if (overlay) overlay.hidden = true;
+    }
+
+    // Iter C.2 · dispatcher de práctica directa por concepto (click en chip del ring)
+    // Reusa la misma lógica de skill→ruta que pickRecommendation, pero con concept_id explícito.
+    async function practiceConcept(cid) {
+      if (!LC.enabled || cid == null) return;
+      const bucket = LC.contentByConcept.get(cid) || { phrases: [], questions: [], verbs: [], linkers: [] };
+      // Priorizar recognize (grammar quiz o quizzes de verbs/linkers) porque es el skill más
+      // universalmente disponible. Si no hay ruta recognize, cae a produce (shadow).
+      let route = null;
+      if (bucket.questions.length > 0) route = 'grammar';
+      else if (bucket.verbs.length > 0) route = 'verbs-quiz';
+      else if (bucket.linkers.length > 0) route = 'linkers-quiz';
+      else if (bucket.phrases.length > 0) route = 'shadow';
+      if (!route) {
+        showLCToast('Este concepto aún no tiene ejercicios');
+        return;
+      }
+      if (route === 'shadow') {
+        const set = new Set(bucket.phrases);
+        openTab('shadow');
+        restartShadow(allPhrases.filter(p => set.has(p.id)));
+      } else if (route === 'grammar') {
+        const set = new Set(bucket.questions);
+        await loadGrammar();
+        openTab('grammar'); setGrammarMode('quiz');
+        startGrammarQuiz(false, grammarData.filter(g => set.has(g.id)));
+      } else if (route === 'verbs-quiz') {
+        const set = new Set(bucket.verbs);
+        await loadVerbs();
+        openTab('verbs'); setVerbMode('quiz');
+        startVerbQuiz(false, verbsData.filter(v => set.has(v.id)));
+      } else if (route === 'linkers-quiz') {
+        const set = new Set(bucket.linkers);
+        await loadLinkers();
+        openTab('linkers'); setLinkerMode('quiz');
+        startQuiz(false, linkersData.filter(l => set.has(l.id)));
+      }
     }
 
     // Learning Core · dispatcher del botón "Practicar" de la recomendación

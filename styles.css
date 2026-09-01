@@ -1272,6 +1272,10 @@
       transition: transform 0.15s;
     }
     .lc-chip:hover { transform: translateY(-1px); }
+    /* Iter C.2 · chips clickeables del ring "Tu curso" */
+    .lc-chip-clickable { cursor: pointer; transition: transform 0.15s ease, box-shadow 0.2s ease; }
+    .lc-chip-clickable:hover { transform: translateY(-2px); box-shadow: 0 4px 12px rgba(0, 0, 0, 0.28); }
+    .lc-chip-clickable:active { transform: translateY(0); }
     .lc-chip-unseen    { background: #1a1c2f;                border-color: #2a2d40; color: #8a90a6; }
     .lc-chip-learning  { background: rgba(251,146,60,0.10);   border-color: rgba(251,146,60,0.4); color: #fbbf24; }
     .lc-chip-practiced { background: rgba(14,165,233,0.12);   border-color: rgba(14,165,233,0.45); color: #7dd3fc; }
