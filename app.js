@@ -3127,18 +3127,35 @@ U15: 55=Añadir · 56=Contrastar · 57=Causa/efecto · 58=Tiempo · 59=Ilustrar 
       return shuffle(opts);
     }
 
+    // D.3: elige el ejemplo por forma preguntada; fallback a example_en legacy.
+    function verbExampleFor(v, type) {
+      if (type === 'participle' && v.example_participle_en) {
+        return { en: v.example_participle_en, es: v.example_participle_es || '' };
+      }
+      if ((type === 'past' || type === 'sentence') && v.example_past_en) {
+        return { en: v.example_past_en, es: v.example_past_es || '' };
+      }
+      if (type === 'present' && v.example_present_en) {
+        return { en: v.example_present_en, es: v.example_present_es || '' };
+      }
+      if (v.example_en) return { en: v.example_en, es: v.example_es || '' };
+      return null;
+    }
+
     function buildVerbQuestion(v, pool) {
       const base = v.infinitive, past = v.past_simple, part = v.past_participle;
       const pastF = firstForm(past);
-      const canSentence = v.example_en && v.example_en.toLowerCase().includes(pastF.toLowerCase());
+      // D.3: prefiere example_past_en para el "completa la frase"; cae a legacy example_en.
+      const sentenceSource = v.example_past_en || v.example_en || '';
+      const canSentence = sentenceSource && sentenceSource.toLowerCase().includes(pastF.toLowerCase());
       const types = canSentence ? ['sentence', 'sentence', 'past', 'participle'] : ['past', 'participle'];
       const type  = types[Math.floor(Math.random() * types.length)];
 
       let promptHtml, tag, correct;
       if (type === 'sentence') {
-        const idx = v.example_en.toLowerCase().indexOf(pastF.toLowerCase());
-        const before = v.example_en.slice(0, idx);
-        const after  = v.example_en.slice(idx + pastF.length);
+        const idx = sentenceSource.toLowerCase().indexOf(pastF.toLowerCase());
+        const before = sentenceSource.slice(0, idx);
+        const after  = sentenceSource.slice(idx + pastF.length);
         promptHtml = `${before}<span class="quiz-blank">_____</span>${after}`;
         tag = '📝 Completa la frase';
         correct = past;
@@ -3235,13 +3252,14 @@ U15: 55=Añadir · 56=Contrastar · 57=Causa/efecto · 58=Tiempo · 59=Ilustrar 
           <span class="vform${q.type === 'participle' ? ' hl' : ''}">${v.past_participle}<small>participio</small></span>
         </div>
         <div class="qfb-es" style="margin-bottom:0.5rem">${v.translation}</div>
-        ${v.example_en ? `<div class="qfb-en">${v.example_en}</div><div class="qfb-es">${v.example_es || ''}</div>` : ''}`;
+        ${(function(){ const ex = verbExampleFor(v, q.type); return ex ? `<div class="qfb-en">${ex.en}</div><div class="qfb-es">${ex.es}</div>` : ''; })()}`;
       fb.classList.remove('hidden');
       document.getElementById('vquiz-score').textContent = vquizScore;
       const next = document.getElementById('vquiz-next');
       next.textContent = (vquizIndex === vquiz.length - 1) ? 'Ver resultado 🏁' : 'Siguiente →';
       next.classList.remove('hidden');
-      if (v.example_en) speakEnglish(v.example_en);
+      const _ex = verbExampleFor(v, q.type);
+      if (_ex) speakEnglish(_ex.en);
       else speakEnglish(`${v.infinitive}, ${firstForm(v.past_simple)}, ${firstForm(v.past_participle)}`);
     }
 
