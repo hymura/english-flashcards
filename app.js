@@ -189,8 +189,12 @@
       // por default). recognize/complete acepta grammar quiz o flashcards/shadow. Skip silencioso.
       pickRecommendation() {
         this.recommendation = null;
+        this.recommendations = [];
         if (!this.enabled || this.weakness.length === 0) return;
+        // Iter C.1 · recoger top-3 items viables (antes: solo el primero) para rotar
+        const MAX_ROTATION = 3;
         for (const w of this.weakness) {
+          if (this.recommendations.length >= MAX_ROTATION) break;
           const skillCode = this.skills.get(w.skill_id) || 'recognize';
           const bucket = this.contentByConcept.get(w.concept_id) || { phrases: [], questions: [], verbs: [], linkers: [] };
           let route = null;
@@ -210,17 +214,29 @@
             else if (bucket.linkers.length > 0) route = 'linkers-quiz';
           }
           if (route) {
-            this.recommendation = {
+            this.recommendations.push({
               w,
               phraseIds:   bucket.phrases   || [],
               questionIds: bucket.questions || [],
               verbIds:     bucket.verbs     || [],
               linkerIds:   bucket.linkers   || [],
               skillCode, route
-            };
-            return;
+            });
           }
         }
+        if (this.recommendations.length === 0) return;
+        // Rotación: índice persistido en localStorage, avanza cada refresh
+        let idx = 0;
+        try {
+          const raw = localStorage.getItem('lc_rec_index');
+          idx = raw != null ? parseInt(raw, 10) : 0;
+          if (isNaN(idx) || idx < 0) idx = 0;
+        } catch (e) {}
+        idx = idx % this.recommendations.length;
+        this.recommendation = this.recommendations[idx];
+        try {
+          localStorage.setItem('lc_rec_index', String((idx + 1) % this.recommendations.length));
+        } catch (e) {}
       },
       // Agrega el mejor state entre las skills del concepto para display resumido.
       // Precedencia: mastered > practiced > learning > rusty > unseen.
