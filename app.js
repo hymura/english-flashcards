@@ -108,6 +108,21 @@
         const outcome = correct ? 'pass' : 'fail';
         await this.recordEvidence(links.map(l => ({ conceptId: l.concept_id, skillId: sk.id, outcome })));
       },
+      // F6 · Dual-write para reglas de pronunciación (quiz match).
+      // Mismo patrón: skill='recognize', content_type='pron_rule', content_id=rule_id.
+      // Los 22 conceptos 'pron-*' están enganchados en lc_content_concept por F3.
+      async submitFromPronRule(ruleId, correct) {
+        if (!this.enabled || !currentUser || ruleId == null) return;
+        const { data: sk, error: eSk } = await sb.from('lc_skill')
+          .select('id').eq('code', 'recognize').single();
+        if (eSk || !sk) { console.warn('LC.submitFromPronRule skill:', eSk && eSk.message); return; }
+        const { data: links, error: eCc } = await sb.from('lc_content_concept')
+          .select('concept_id').eq('content_type', 'pron_rule').eq('content_id', ruleId);
+        if (eCc) { console.warn('LC.submitFromPronRule lookup:', eCc.message); return; }
+        if (!links || links.length === 0) return;
+        const outcome = correct ? 'pass' : 'fail';
+        await this.recordEvidence(links.map(l => ({ conceptId: l.concept_id, skillId: sk.id, outcome })));
+      },
       async submitFromLinker(linkerId, correct) {
         if (!this.enabled || !currentUser || linkerId == null) return;
         const { data: sk, error: eSk } = await sb.from('lc_skill')
@@ -1098,7 +1113,10 @@
       stopLabMic();
       const rules = (pronData && pronData.rules) || [];
       let html = labSubBarHtml('rules');
-      html += `<p class="today-sub" style="text-align:center; margin-bottom:1rem">22 reglas mnemónicas para leer y sonar mejor en inglés ✨</p>`;
+      html += `<p class="today-sub" style="text-align:center; margin-bottom:0.6rem">22 reglas mnemónicas para leer y sonar mejor en inglés ✨</p>`;
+      html += `<div class="pron-quiz-cta">
+        <button class="pron-quiz-start" onclick="startPronMatchQuiz()">▶ Practicar reglas <span class="pron-quiz-len">10 preguntas</span></button>
+      </div>`;
       ['A', 'B', 'C'].forEach(cat => {
         const catRules = rules.filter(r => r.category === cat);
         if (!catRules.length) return;
@@ -1198,6 +1216,225 @@
           </div>` : ''}
         </div>`;
       window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+
+    // ╔══════════════════════════════════════════════════════════╗
+    // ║  QUIZ MATCH REGLAS DE ORO (Fase F5 · V1)                 ║
+    // ║  Modo match: se muestra una palabra y el usuario elige   ║
+    // ║  la regla correcta entre 4 opciones. Escribe legacy      ║
+    // ║  lc_pron_progress (mode='match'). Dual-write al Core     ║
+    // ║  (F6) via LC.submitFromPronRule (best-effort).           ║
+    // ╚══════════════════════════════════════════════════════════╝
+    const PRON_QUIZ_SIZE = 10;
+    let pronQuiz = null;  // { items:[{example, correctRule, options:[4 rules]}], idx, score, answered, missed:[] }
+
+    function buildPronMatchItems() {
+      if (!pronData || !pronData.rules || pronData.rules.length < 4) return [];
+      const rules   = pronData.rules;
+      const byId    = new Map(rules.map(r => [r.id, r]));
+      const byCode  = new Map(rules.map(r => [r.code, r]));
+      // Pool de ejemplos elegibles: excluye excepciones (no ilustran la regla base)
+      // y descarta reglas cuya título repite palabra clave (no cambia — ya excluimos por is_exception).
+      const pool = [];
+      rules.forEach(r => {
+        (pronData.byRule[r.code] || []).forEach(ex => {
+          if (!ex.is_exception && ex.word_en) pool.push({ ex, rule: r });
+        });
+      });
+      if (pool.length < 4) return [];
+
+      // Muestreo: hasta PRON_QUIZ_SIZE, evitando repetir la MISMA palabra;
+      // permitimos repetir regla si hace falta (algunas reglas tienen pocos ejemplos).
+      const shuffled = shuffle(pool.slice());
+      const seenWord = new Set();
+      const chosen = [];
+      for (const p of shuffled) {
+        const key = (p.ex.word_en || '').toLowerCase();
+        if (seenWord.has(key)) continue;
+        seenWord.add(key);
+        chosen.push(p);
+        if (chosen.length >= PRON_QUIZ_SIZE) break;
+      }
+
+      // Distractores: 3 reglas ≠ correcta. Prefiere misma categoría; rellena de otras.
+      return chosen.map(({ ex, rule }) => {
+        const sameCat = rules.filter(x => x.id !== rule.id && x.category === rule.category);
+        const otherCat = rules.filter(x => x.id !== rule.id && x.category !== rule.category);
+        const pickN = (arr, n) => shuffle(arr.slice()).slice(0, n);
+        let distractors = pickN(sameCat, 3);
+        if (distractors.length < 3) {
+          distractors = distractors.concat(pickN(otherCat, 3 - distractors.length));
+        }
+        const options = shuffle([rule, ...distractors]);
+        return { example: ex, correctRule: rule, options };
+      });
+    }
+
+    function startPronMatchQuiz() {
+      stopLabMic();
+      const items = buildPronMatchItems();
+      if (!items.length) {
+        document.getElementById('lab-content').innerHTML = labSubBarHtml('rules')
+          + '<div class="no-data">No pude armar el quiz. ¿Ya cargaste las reglas?</div>';
+        return;
+      }
+      pronQuiz = { items, idx: 0, score: 0, answered: false, missed: [] };
+      renderPronMatch();
+    }
+
+    function renderPronMatch() {
+      if (!pronQuiz) return;
+      const q = pronQuiz.items[pronQuiz.idx];
+      const total = pronQuiz.items.length;
+      const spk = t => (t || '').replace(/'/g, "\\'").replace(/"/g, '&quot;');
+      const pct = Math.round(pronQuiz.idx / total * 100);
+
+      document.getElementById('lab-content').innerHTML = `
+        ${labSubBarHtml('rules')}
+        <button class="lab-back" onclick="cancelPronMatchQuiz()">← Volver al índice</button>
+        <div class="pron-quiz-wrap">
+          <div class="pron-quiz-top">
+            <div class="pron-quiz-progress">
+              <span>Pregunta ${pronQuiz.idx + 1} de ${total}</span>
+              <span class="pron-quiz-score">Aciertos: ${pronQuiz.score}</span>
+            </div>
+            <div class="pron-quiz-bar"><div class="pron-quiz-bar-fill" style="width:${pct}%"></div></div>
+          </div>
+          <div class="pron-quiz-card">
+            <div class="pron-quiz-question">¿Qué regla explica la pronunciación de esta palabra?</div>
+            <div class="pron-quiz-word">
+              <span class="pron-quiz-word-en">${q.example.word_en}</span>
+              <button class="pron-quiz-play" onclick="labSpeak('${spk(q.example.word_en)}', this)" title="Escuchar">🔊</button>
+            </div>
+            <div class="pron-quiz-options" id="pron-quiz-options">
+              ${q.options.map((r, i) => `
+                <button class="quiz-opt pron-quiz-opt" id="pqopt-${i}" onclick="answerPronMatch(${i})">
+                  <span class="pron-quiz-opt-code">${r.code.toUpperCase()}</span>
+                  <span class="pron-quiz-opt-title">${r.title_es}</span>
+                </button>`).join('')}
+            </div>
+            <div class="quiz-feedback hidden" id="pron-quiz-feedback"></div>
+            <button class="pron-quiz-next hidden" id="pron-quiz-next" onclick="nextPronMatch()">Siguiente →</button>
+          </div>
+        </div>`;
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+
+    async function answerPronMatch(i) {
+      if (!pronQuiz || pronQuiz.answered) return;
+      pronQuiz.answered = true;
+      const q = pronQuiz.items[pronQuiz.idx];
+      const correctIdx = q.options.findIndex(o => o.id === q.correctRule.id);
+      const correct = (i === correctIdx);
+      if (correct) {
+        pronQuiz.score += 1;
+        const scoreEl = document.querySelector('.pron-quiz-score');
+        if (scoreEl) scoreEl.textContent = 'Aciertos: ' + pronQuiz.score;
+      } else {
+        pronQuiz.missed.push(q.correctRule);
+      }
+
+      q.options.forEach((_, idx) => {
+        const btn = document.getElementById('pqopt-' + idx);
+        if (!btn) return;
+        if (idx === correctIdx) btn.classList.add('ok');
+        else if (idx === i)     btn.classList.add('bad');
+        btn.disabled = true;
+      });
+
+      const ex = q.example;
+      const fb = document.getElementById('pron-quiz-feedback');
+      fb.className = 'quiz-feedback ' + (correct ? 'good' : 'bad');
+      fb.innerHTML = `
+        <div class="qfb-title">${correct ? '✅ ¡Correcto!' : '❌ La regla es:'}</div>
+        <div class="qfb-en"><b>${q.correctRule.code.toUpperCase()}</b> · ${q.correctRule.title_es}</div>
+        <div class="qfb-es" style="margin-top:0.35rem">${q.correctRule.formula}</div>
+        ${(ex.folk_es || ex.ipa) ? `<div class="pron-quiz-hint">
+          🗣️ ${ex.folk_es ? `<span class="pron-ex-folk">${ex.folk_es}</span>` : ''}
+          ${ex.ipa ? `<span class="pron-ex-ipa">/${ex.ipa}/</span>` : ''}
+          ${ex.gloss_es ? `<span class="pron-quiz-gloss"> — ${ex.gloss_es}</span>` : ''}
+        </div>` : ''}`;
+      fb.classList.remove('hidden');
+      const nextBtn = document.getElementById('pron-quiz-next');
+      nextBtn.textContent = (pronQuiz.idx === pronQuiz.items.length - 1) ? 'Ver resultado 🏁' : 'Siguiente →';
+      nextBtn.classList.remove('hidden');
+
+      // ── Legacy autoritativo · lc_pron_progress (F5) ─────────────
+      // Solo si el usuario está autenticado; en modo invitado no hay lugar donde escribir.
+      if (currentUser && currentUser.id) {
+        sb.from('lc_pron_progress').insert({
+          rule_id: q.correctRule.id,
+          mode:    'match',
+          outcome: correct ? 'pass' : 'fail'
+        }).then(({ error }) => {
+          if (error) console.warn('lc_pron_progress insert:', error.message);
+        });
+      }
+
+      // ── Learning Core · dual-write (F6) ─────────────────────────
+      // Best-effort tras el legacy, detrás de LC.enabled. Nunca bloquea la UI.
+      if (LC.enabled && typeof LC.submitFromPronRule === 'function') {
+        LC.submitFromPronRule(q.correctRule.id, correct)
+          .then(() => (typeof lcRefreshAndNotify === 'function') && lcRefreshAndNotify())
+          .catch(e => console.warn('LC dual-write (pron):', e));
+      }
+    }
+
+    function nextPronMatch() {
+      if (!pronQuiz) return;
+      if (pronQuiz.idx < pronQuiz.items.length - 1) {
+        pronQuiz.idx += 1;
+        pronQuiz.answered = false;
+        renderPronMatch();
+      } else {
+        renderPronMatchResult();
+      }
+    }
+
+    function renderPronMatchResult() {
+      if (!pronQuiz) return;
+      const total = pronQuiz.items.length;
+      const pct   = Math.round(pronQuiz.score / total * 100);
+      const cls   = pct >= 80 ? 'good' : (pct >= 50 ? 'meh' : 'bad');
+      const emoji = pct >= 80 ? '🏆' : (pct >= 50 ? '💪' : '🔄');
+      const msg   = pct >= 80 ? '¡Excelente!' : (pct >= 50 ? '¡Vas bien!' : '¡A repasar!');
+      // Missed únicas (una regla puede haber salido varias veces)
+      const missedUnique = [];
+      const seen = new Set();
+      pronQuiz.missed.forEach(r => { if (!seen.has(r.code)) { seen.add(r.code); missedUnique.push(r); } });
+      const missedHtml = missedUnique.length
+        ? `<div class="pron-quiz-missed">
+             <div class="pron-quiz-missed-t">Reglas para repasar</div>
+             ${missedUnique.map(r => `
+               <button class="pron-quiz-missed-item" onclick="openPronRule('${r.code}')">
+                 <span class="pron-quiz-missed-code">${r.code.toUpperCase()}</span>
+                 <span class="pron-quiz-missed-title">${r.title_es}</span>
+                 <span class="pron-quiz-missed-arrow">→</span>
+               </button>`).join('')}
+           </div>`
+        : `<div class="pron-quiz-clean">¡Sin fallos! 🎉</div>`;
+
+      document.getElementById('lab-content').innerHTML = `
+        ${labSubBarHtml('rules')}
+        <button class="lab-back" onclick="renderPronIndex()">← Volver a estudiar</button>
+        <div class="pron-quiz-result ${cls}">
+          <div class="pron-quiz-result-emoji">${emoji}</div>
+          <div class="pron-quiz-result-msg">${msg}</div>
+          <div class="pron-quiz-result-score">${pronQuiz.score} / ${total}</div>
+          <div class="pron-quiz-result-pct">${pct}%</div>
+          ${missedHtml}
+          <div class="pron-quiz-result-actions">
+            <button class="pron-quiz-start" onclick="startPronMatchQuiz()">🔁 Otra ronda</button>
+            <button class="lab-back" style="margin:0" onclick="renderPronIndex()">← Volver a estudiar</button>
+          </div>
+        </div>`;
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+      pronQuiz = null;
+    }
+
+    function cancelPronMatchQuiz() {
+      pronQuiz = null;
+      renderPronIndex();
     }
 
     // ╔══════════════════════════════════════════════════════════╗
