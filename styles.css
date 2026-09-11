@@ -1542,4 +1542,236 @@
       transition: transform 0.15s, box-shadow 0.2s;
     }
     .lc-onb-btn:hover { transform: translateY(-1px); box-shadow: 0 8px 24px rgba(168,85,247,0.4); }
+
+    /* ══════════════════════════════════════════════════════════
+       REGLAS DE ORO DE PRONUNCIACIÓN (Fase F4 · V1)
+       Sub-vista dentro de la pestaña Sonidos.
+       ══════════════════════════════════════════════════════════ */
+
+    /* Sub-bar: Fonemas IPA · Reglas de oro */
+    .lab-sub-bar {
+      display: flex; gap: 0.5rem;
+      justify-content: center;
+      margin: 0 auto 1.2rem;
+      padding: 0.3rem;
+      background: var(--bg-card, #14162a);
+      border: 1px solid var(--border, #22243d);
+      border-radius: 10px;
+      max-width: 22rem;
+    }
+    .lab-sub-btn {
+      flex: 1;
+      padding: 0.55rem 0.8rem;
+      background: transparent;
+      color: var(--text-muted, #9aa0b8);
+      border: none;
+      border-radius: 7px;
+      font-size: 0.85rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: background 0.15s, color 0.15s;
+    }
+    .lab-sub-btn:hover { color: var(--text, #e6e8f4); }
+    .lab-sub-btn.active {
+      background: linear-gradient(135deg, #a855f7 0%, #7c3aed 100%);
+      color: #fff;
+    }
+
+    /* Acordeones por categoría */
+    .pron-cat { margin: 0 0 0.85rem; }
+    .pron-cat-head {
+      width: 100%;
+      display: flex; align-items: center; gap: 0.6rem;
+      padding: 0.75rem 0.9rem;
+      background: var(--bg-card, #14162a);
+      border: 1px solid var(--border, #22243d);
+      border-radius: 10px;
+      color: var(--text, #e6e8f4);
+      font-size: 0.95rem; font-weight: 600;
+      cursor: pointer;
+      transition: background 0.15s;
+    }
+    .pron-cat-head:hover { background: var(--bg-card-hover, #1a1d34); }
+    .pron-cat-head.open  { border-radius: 10px 10px 0 0; border-bottom-color: transparent; }
+    .pron-cat-caret { width: 1rem; font-size: 0.8rem; color: var(--text-muted, #9aa0b8); }
+    .pron-cat-title { flex: 1; text-align: left; }
+    .pron-cat-count {
+      font-family: ui-monospace, "SF Mono", monospace;
+      font-size: 0.75rem; font-weight: 500;
+      color: var(--text-muted, #9aa0b8);
+      background: rgba(148, 163, 184, 0.12);
+      padding: 2px 8px; border-radius: 4px;
+    }
+    .pron-cat-body {
+      display: flex; flex-direction: column; gap: 0.4rem;
+      padding: 0.55rem 0.5rem 0.75rem;
+      background: rgba(20, 22, 42, 0.4);
+      border: 1px solid var(--border, #22243d);
+      border-top: none;
+      border-radius: 0 0 10px 10px;
+    }
+
+    /* Fila de regla en el índice */
+    .pron-item {
+      display: grid;
+      grid-template-columns: 3rem minmax(0, 1.4fr) minmax(0, 1.3fr) auto;
+      gap: 0.75rem;
+      align-items: center;
+      padding: 0.55rem 0.7rem;
+      background: transparent;
+      border: none; border-radius: 6px;
+      color: var(--text, #e6e8f4);
+      text-align: left;
+      cursor: pointer;
+      transition: background 0.12s;
+    }
+    .pron-item:hover { background: rgba(168, 85, 247, 0.08); }
+    .pron-item-code {
+      font-family: ui-monospace, "SF Mono", monospace;
+      font-size: 0.72rem; font-weight: 700;
+      color: #d4a12a;
+      letter-spacing: 0.05em;
+    }
+    .pron-item-title { font-size: 0.9rem; font-weight: 500; }
+    .pron-item-exc {
+      display: inline-block;
+      margin-left: 0.3rem;
+      color: #f0a878;
+      font-size: 0.85em;
+      cursor: help;
+    }
+    .pron-item-formula {
+      font-family: ui-monospace, "SF Mono", monospace;
+      font-size: 0.76rem;
+      color: var(--text-muted, #9aa0b8);
+      white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    }
+    .pron-item-tags { display: flex; gap: 0.25rem; flex-wrap: nowrap; }
+
+    @media (max-width: 640px) {
+      .pron-item {
+        grid-template-columns: 3rem 1fr auto;
+      }
+      .pron-item-formula { grid-column: 1 / -1; margin-top: 0.15rem; }
+    }
+
+    /* Chips de etiquetas */
+    .pron-chip {
+      display: inline-block;
+      padding: 1px 7px;
+      border-radius: 3px;
+      font-family: ui-monospace, "SF Mono", monospace;
+      font-size: 0.62rem; font-weight: 700;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+      line-height: 1.5;
+      white-space: nowrap;
+    }
+    .pron-chip-us    { background: rgba(74, 112, 82, 0.2);  color: #6ab080; }
+    .pron-chip-aprox { background: rgba(212, 161, 42, 0.15); color: #d4a12a; }
+    .pron-chip-base  { background: rgba(148, 163, 184, 0.15); color: #94a3b8; }
+    .pron-chip-cons  { background: rgba(168, 85, 247, 0.18); color: #c084fc; }
+    .pron-chip-nueva { background: rgba(240, 168, 120, 0.18); color: #f0a878; }
+
+    /* Vista de detalle */
+    .pron-detail { padding: 1rem 1.1rem; }
+    .pron-head {
+      display: flex; align-items: baseline; gap: 0.7rem; flex-wrap: wrap;
+      padding-bottom: 0.85rem; margin-bottom: 1rem;
+      border-bottom: 1px solid var(--border, #22243d);
+    }
+    .pron-head-code {
+      font-family: ui-monospace, "SF Mono", monospace;
+      font-size: 0.9rem; font-weight: 700;
+      color: #d4a12a; letter-spacing: 0.06em;
+    }
+    .pron-head-title {
+      font-size: 1.1rem; font-weight: 600;
+      color: var(--text, #e6e8f4);
+      flex: 1; min-width: 0;
+    }
+    .pron-head-tags { display: flex; gap: 0.3rem; flex-wrap: wrap; }
+
+    .pron-formula {
+      font-family: ui-monospace, "SF Mono", monospace;
+      font-size: 1.1rem; font-weight: 600;
+      color: #c084fc;
+      text-align: center;
+      padding: 0.9rem 1rem;
+      background: rgba(168, 85, 247, 0.08);
+      border: 1px dashed rgba(168, 85, 247, 0.3);
+      border-radius: 8px;
+      margin: 0 0 1rem;
+      letter-spacing: 0.01em;
+    }
+
+    .pron-accent-lock {
+      text-align: center;
+      padding: 0.55rem;
+      font-size: 0.78rem;
+      color: #6ab080;
+      background: rgba(74, 112, 82, 0.15);
+      border-radius: 6px;
+      margin-bottom: 1rem;
+    }
+
+    .pron-exc p { color: #f0a878; }
+
+    /* Filas de ejemplos */
+    .pron-ex-row {
+      display: grid;
+      grid-template-columns: auto 1fr 1fr auto;
+      gap: 0.75rem;
+      align-items: center;
+      padding: 0.6rem 0.5rem;
+      border-bottom: 1px solid rgba(148, 163, 184, 0.08);
+    }
+    .pron-ex-row:last-of-type { border-bottom: none; }
+    .pron-ex-row.pron-ex-exc { background: rgba(240, 168, 120, 0.05); }
+
+    .pron-ex-play {
+      background: rgba(168, 85, 247, 0.15);
+      border: none; border-radius: 6px;
+      padding: 0.35rem 0.55rem;
+      cursor: pointer;
+      font-size: 0.95rem;
+    }
+    .pron-ex-play:hover { background: rgba(168, 85, 247, 0.25); }
+
+    .pron-ex-word { display: flex; flex-direction: column; gap: 0.1rem; min-width: 0; }
+    .pron-ex-en {
+      font-size: 0.95rem; font-weight: 600;
+      color: var(--text, #e6e8f4);
+    }
+    .pron-ex-gloss {
+      font-size: 0.72rem;
+      color: var(--text-muted, #9aa0b8);
+    }
+    .pron-ex-exc-tag {
+      display: inline-block;
+      margin-left: 0.35rem;
+      color: #f0a878;
+      font-size: 0.85em;
+    }
+
+    .pron-ex-phon {
+      display: flex; flex-direction: column; gap: 0.1rem;
+      font-family: ui-monospace, "SF Mono", monospace;
+      min-width: 0;
+    }
+    .pron-ex-folk {
+      font-size: 0.88rem; font-weight: 500;
+      color: #c084fc;
+    }
+    .pron-ex-ipa {
+      font-size: 0.7rem;
+      color: var(--text-muted, #9aa0b8);
+    }
+
+    @media (max-width: 640px) {
+      .pron-ex-row {
+        grid-template-columns: auto 1fr auto;
+      }
+      .pron-ex-phon { grid-column: 2 / 3; margin-top: 0.15rem; }
+    }
   

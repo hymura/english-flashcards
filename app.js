@@ -855,7 +855,8 @@
       currentSound = null;
       stopLabMic();
       const cats = [...new Set(phonemesData.map(p => p.category))];
-      let html = '<p class="today-sub" style="text-align:center; margin-bottom:1rem">Elige un sonido para escucharlo, ver la posición de la boca y practicarlo 🔬</p>';
+      let html = labSubBarHtml('phonemes')
+               + '<p class="today-sub" style="text-align:center; margin-bottom:1rem">Elige un sonido para escucharlo, ver la posición de la boca y practicarlo 🔬</p>';
       cats.forEach(c => {
         html += `<div class="lab-cat-title">${c}</div><div class="lab-grid">`;
         phonemesData.filter(p => p.category === c).forEach(p => {
@@ -898,6 +899,7 @@
         <div class="lab-phrase-fb hidden" id="lab-fb-${i}"></div>`).join('');
 
       document.getElementById('lab-content').innerHTML = `
+        ${labSubBarHtml('phonemes')}
         <button class="lab-back" onclick="renderLabGrid()">← Todos los sonidos</button>
         <div class="lab-detail">
           <div class="lab-detail-head">
@@ -1012,6 +1014,190 @@
         </div>
         <div class="word-row" style="margin-bottom:0.3rem">${chips}</div>
         <div style="color:var(--text-muted); font-size:0.78rem">Dijiste: “${said}”</div>`;
+    }
+
+    // ╔══════════════════════════════════════════════════════════╗
+    // ║  REGLAS DE ORO DE PRONUNCIACIÓN  (Fase F4 · V1)          ║
+    // ║  Sub-vista de la pestaña Sonidos. Solo estudio; sin quiz ║
+    // ║  ni dual-write al Core (llegan en F5 y F6).              ║
+    // ╚══════════════════════════════════════════════════════════╝
+    let pronData = null;          // { rules: [...], byRule: { 'a1': [ex,...], ... } }
+    let currentRule = null;
+    let labSubView = 'phonemes';  // 'phonemes' | 'rules'
+    let pronCatOpen = { A: true, B: false, C: false };
+
+    const PRON_CAT_LABELS = {
+      A: 'Consonantes',
+      B: 'Vocales y sílabas',
+      C: 'Palabras clave y comodines'
+    };
+    const PRON_TAG_LABELS = {
+      us:        { text: '🇺🇸 US',       cls: 'pron-chip pron-chip-us' },
+      aprox:     { text: 'aprox',       cls: 'pron-chip pron-chip-aprox' },
+      base:      { text: 'base',        cls: 'pron-chip pron-chip-base' },
+      consolida: { text: 'consolidada', cls: 'pron-chip pron-chip-cons' },
+      nueva:     { text: 'nueva',       cls: 'pron-chip pron-chip-nueva' }
+    };
+
+    function labSubBarHtml(active) {
+      const btn = (id, label) =>
+        `<button class="lab-sub-btn ${active === id ? 'active' : ''}" onclick="setLabSubView('${id}', this)">${label}</button>`;
+      return `<div class="lab-sub-bar">
+        ${btn('phonemes', 'Fonemas IPA')}
+        ${btn('rules', '◆ Reglas de oro')}
+      </div>`;
+    }
+
+    function setLabSubView(sub, el) {
+      labSubView = sub;
+      currentRule = null;
+      stopLabMic();
+      if (sub === 'phonemes') {
+        phonemesData ? renderLabGrid() : loadLab();
+      } else {
+        pronData ? renderPronIndex() : loadPronRules();
+      }
+    }
+
+    async function loadPronRules() {
+      document.getElementById('lab-content').innerHTML =
+        labSubBarHtml('rules') + '<div class="no-data">Cargando reglas...</div>';
+      try {
+        const rulesQ = await sb.from('lc_pron_rule')
+          .select('id, code, category, ordinal, title_es, formula, explanation_md, exceptions_md, tags')
+          .order('category', { ascending: true }).order('ordinal', { ascending: true });
+        if (rulesQ.error) throw rulesQ.error;
+        const exQ = await sb.from('lc_pron_example')
+          .select('rule_id, ordinal, word_en, folk_es, ipa, gloss_es, is_exception')
+          .order('rule_id', { ascending: true }).order('ordinal', { ascending: true });
+        if (exQ.error) throw exQ.error;
+
+        const byRuleId = {};
+        (exQ.data || []).forEach(e => { (byRuleId[e.rule_id] = byRuleId[e.rule_id] || []).push(e); });
+        const byRule = {};
+        (rulesQ.data || []).forEach(r => { byRule[r.code] = byRuleId[r.id] || []; });
+
+        pronData = { rules: rulesQ.data || [], byRule };
+        renderPronIndex();
+      } catch (err) {
+        document.getElementById('lab-content').innerHTML = labSubBarHtml('rules')
+          + `<div class="no-data">No pude cargar las reglas.<br><span style="font-size:0.75rem">${(err && err.message) || err}</span></div>`;
+      }
+    }
+
+    function pronTagChips(tags) {
+      if (!tags || !tags.length) return '';
+      return tags.map(t => {
+        const spec = PRON_TAG_LABELS[t];
+        return spec ? `<span class="${spec.cls}">${spec.text}</span>` : '';
+      }).join(' ');
+    }
+
+    function renderPronIndex() {
+      currentRule = null;
+      stopLabMic();
+      const rules = (pronData && pronData.rules) || [];
+      let html = labSubBarHtml('rules');
+      html += `<p class="today-sub" style="text-align:center; margin-bottom:1rem">22 reglas mnemónicas para leer y sonar mejor en inglés ✨</p>`;
+      ['A', 'B', 'C'].forEach(cat => {
+        const catRules = rules.filter(r => r.category === cat);
+        if (!catRules.length) return;
+        const open = pronCatOpen[cat];
+        html += `<div class="pron-cat">
+          <button class="pron-cat-head ${open ? 'open' : ''}" onclick="togglePronCat('${cat}')">
+            <span class="pron-cat-caret">${open ? '▾' : '▸'}</span>
+            <span class="pron-cat-title">${cat} · ${PRON_CAT_LABELS[cat]}</span>
+            <span class="pron-cat-count">${catRules.length}</span>
+          </button>
+          <div class="pron-cat-body${open ? '' : ' hidden'}">`;
+        catRules.forEach(r => {
+          const excMark = r.exceptions_md ? `<span class="pron-item-exc" title="Con excepciones">✱</span>` : '';
+          html += `<button class="pron-item" onclick="openPronRule('${r.code}')">
+                     <span class="pron-item-code">${r.code.toUpperCase()}</span>
+                     <span class="pron-item-title">${r.title_es}${excMark}</span>
+                     <span class="pron-item-formula">${r.formula}</span>
+                     <span class="pron-item-tags">${pronTagChips(r.tags)}</span>
+                   </button>`;
+        });
+        html += `</div></div>`;
+      });
+      document.getElementById('lab-content').innerHTML = html;
+    }
+
+    function togglePronCat(cat) {
+      pronCatOpen[cat] = !pronCatOpen[cat];
+      renderPronIndex();
+    }
+
+    function openPronRule(code) {
+      stopLabMic();
+      const r = pronData && pronData.rules.find(x => x.code === code);
+      if (!r) return;
+      currentRule = r;
+      const examples = (pronData.byRule[code] || []);
+      const spk = t => (t || '').replace(/'/g, "\\'").replace(/"/g, '&quot;');
+
+      const isUsOnly = (r.tags || []).includes('us');
+      const accents = isUsOnly
+        ? `<div class="pron-accent-lock">🇺🇸 US · esta regla solo aplica en inglés americano</div>`
+        : `<div class="lab-accents">
+             <button class="lab-accent ${labLang === 'en-US' ? 'active' : ''}" onclick="setLabLang('en-US', this)">🇺🇸 US</button>
+             <button class="lab-accent ${labLang === 'en-GB' ? 'active' : ''}" onclick="setLabLang('en-GB', this)">🇬🇧 UK</button>
+           </div>`;
+
+      // Shim para reutilizar labPhraseMic sin tocar su código:
+      // labPhraseMic(i) usa currentSound.phrases[i].
+      currentSound = {
+        id:      'pron-' + code,
+        symbol:  r.code.toUpperCase(),
+        name:    r.title_es,
+        phrases: examples.map(e => e.word_en)
+      };
+      if (isUsOnly) labLang = 'en-US';
+
+      const exampleRows = examples.map((e, i) => {
+        const excCls = e.is_exception ? ' pron-ex-exc' : '';
+        const excTag = e.is_exception ? `<span class="pron-ex-exc-tag" title="Excepción">✱</span>` : '';
+        return `<div class="pron-ex-row${excCls}">
+          <button class="pron-ex-play" onclick="labSpeak('${spk(e.word_en)}', this)" title="Escuchar">🔊</button>
+          <div class="pron-ex-word">
+            <span class="pron-ex-en">${e.word_en}</span>${excTag}
+            <span class="pron-ex-gloss">${e.gloss_es || ''}</span>
+          </div>
+          <div class="pron-ex-phon">
+            <span class="pron-ex-folk">${e.folk_es || ''}</span>
+            ${e.ipa ? `<span class="pron-ex-ipa">/${e.ipa}/</span>` : ''}
+          </div>
+          <button class="btn-mic-sm" id="lab-mic-${i}" onclick="labPhraseMic(${i})" title="Grábate">🎤</button>
+        </div>
+        <div class="lab-phrase-fb hidden" id="lab-fb-${i}"></div>`;
+      }).join('');
+
+      document.getElementById('lab-content').innerHTML = `
+        ${labSubBarHtml('rules')}
+        <button class="lab-back" onclick="renderPronIndex()">← Todas las reglas</button>
+        <div class="lab-detail pron-detail">
+          <div class="pron-head">
+            <div class="pron-head-code">${r.code.toUpperCase()}</div>
+            <div class="pron-head-title">${r.title_es}</div>
+            <div class="pron-head-tags">${pronTagChips(r.tags)}</div>
+          </div>
+          <div class="pron-formula">${r.formula}</div>
+          ${accents}
+          <div class="lab-sec">
+            <div class="lab-sec-t">📖 Cómo funciona</div>
+            <p>${r.explanation_md || ''}</p>
+          </div>
+          ${r.exceptions_md ? `<div class="lab-sec pron-exc">
+            <div class="lab-sec-t">✱ Excepciones</div>
+            <p>${r.exceptions_md}</p>
+          </div>` : ''}
+          ${exampleRows ? `<div class="lab-sec">
+            <div class="lab-sec-t">💬 Ejemplos · escucha, grábate y compara</div>
+            ${exampleRows}
+          </div>` : ''}
+        </div>`;
+      window.scrollTo({ top: 0, behavior: 'smooth' });
     }
 
     // ╔══════════════════════════════════════════════════════════╗
