@@ -1038,8 +1038,9 @@
     // ╚══════════════════════════════════════════════════════════╝
     let pronData = null;          // { rules: [...], byRule: { 'a1': [ex,...], ... } }
     let currentRule = null;
-    let labSubView = 'phonemes';  // 'phonemes' | 'rules'
+    let labSubView = 'phonemes';  // 'phonemes' | 'rules' | 'progress'
     let pronCatOpen = { A: true, B: false, C: false };
+    let pronProgressCache = null; // { byConceptCode: { 'pron-a1': {score, decayed_score, state} } }
 
     const PRON_CAT_LABELS = {
       A: 'Consonantes',
@@ -1060,6 +1061,7 @@
       return `<div class="lab-sub-bar">
         ${btn('phonemes', 'Fonemas IPA')}
         ${btn('rules', '◆ Reglas de oro')}
+        ${btn('progress', '📊 Mi progreso')}
       </div>`;
     }
 
@@ -1069,6 +1071,8 @@
       stopLabMic();
       if (sub === 'phonemes') {
         phonemesData ? renderLabGrid() : loadLab();
+      } else if (sub === 'progress') {
+        loadPronProgress();
       } else {
         pronData ? renderPronIndex() : loadPronRules();
       }
@@ -1435,6 +1439,160 @@
     function cancelPronMatchQuiz() {
       pronQuiz = null;
       renderPronIndex();
+    }
+
+    // ╔══════════════════════════════════════════════════════════╗
+    // ║  PANEL DE PROGRESO REGLAS DE ORO (Fase F7 · V1)          ║
+    // ║  Sub-view "Mi progreso" en Sonidos > Reglas.             ║
+    // ║  Lee v_lc_mastery (skill='recognize') filtrado por RLS.  ║
+    // ║  Grid de 22 tarjetas con color por estado, click abre la ║
+    // ║  regla en modo estudio.                                  ║
+    // ╚══════════════════════════════════════════════════════════╝
+    const PRON_STATE_LABELS = {
+      mastered:  { icon: '🏆', text: 'dominadas',    cls: 'st-mastered' },
+      practiced: { icon: '💪', text: 'practicadas',  cls: 'st-practiced' },
+      rusty:     { icon: '⏰', text: 'oxidadas',     cls: 'st-rusty' },
+      learning:  { icon: '📖', text: 'aprendiendo',  cls: 'st-learning' },
+      unseen:    { icon: '👁️', text: 'sin ver',      cls: 'st-unseen' },
+      new:       { icon: '⭐', text: 'nuevas',       cls: 'st-new' }
+    };
+    const PRON_STATE_ORDER = ['mastered', 'practiced', 'rusty', 'learning', 'unseen', 'new'];
+
+    async function loadPronProgress() {
+      document.getElementById('lab-content').innerHTML =
+        labSubBarHtml('progress') + '<div class="no-data">Cargando tu progreso...</div>';
+
+      if (!currentUser || !currentUser.id) {
+        document.getElementById('lab-content').innerHTML = labSubBarHtml('progress')
+          + `<div class="no-data">
+               <div style="font-size:2rem; margin-bottom:0.5rem">🔒</div>
+               Inicia sesión para ver tu progreso en las 22 reglas.
+             </div>`;
+        return;
+      }
+
+      try {
+        // Asegura pronData (reglas + ejemplos) para tener code/title/category de cada regla
+        if (!pronData) {
+          const rulesQ = await sb.from('lc_pron_rule')
+            .select('id, code, category, ordinal, title_es, formula, explanation_md, exceptions_md, tags')
+            .order('category', { ascending: true }).order('ordinal', { ascending: true });
+          if (rulesQ.error) throw rulesQ.error;
+          const exQ = await sb.from('lc_pron_example')
+            .select('rule_id, ordinal, word_en, folk_es, ipa, gloss_es, is_exception')
+            .order('rule_id', { ascending: true }).order('ordinal', { ascending: true });
+          if (exQ.error) throw exQ.error;
+          const byRuleId = {};
+          (exQ.data || []).forEach(e => { (byRuleId[e.rule_id] = byRuleId[e.rule_id] || []).push(e); });
+          const byRule = {};
+          (rulesQ.data || []).forEach(r => { byRule[r.code] = byRuleId[r.id] || []; });
+          pronData = { rules: rulesQ.data || [], byRule };
+        }
+
+        // 1. skill 'recognize' — mismo par (concept, skill) que usa el dual-write F6
+        const { data: sk, error: eSk } = await sb.from('lc_skill')
+          .select('id').eq('code', 'recognize').single();
+        if (eSk || !sk) throw eSk || new Error('skill recognize not found');
+
+        // 2. Conceptos pron-* → id + code (para poder mapear v_lc_mastery ↔ regla)
+        const { data: concepts, error: eC } = await sb.from('lc_concept')
+          .select('id, code').like('code', 'pron-%');
+        if (eC) throw eC;
+        const idToCode = new Map((concepts || []).map(c => [c.id, c.code]));
+        const conceptIds = (concepts || []).map(c => c.id);
+
+        // 3. v_lc_mastery: RLS aplica → solo evidencia del usuario logueado
+        let masteryByCode = {};
+        if (conceptIds.length) {
+          const { data: mast, error: eM } = await sb.from('v_lc_mastery')
+            .select('concept_id, score, decayed_score, state, n_evidence')
+            .in('concept_id', conceptIds)
+            .eq('skill_id', sk.id);
+          if (eM) throw eM;
+          (mast || []).forEach(m => {
+            const code = idToCode.get(m.concept_id);
+            if (code) masteryByCode[code] = m;
+          });
+        }
+
+        pronProgressCache = { byConceptCode: masteryByCode };
+        renderPronProgress();
+      } catch (err) {
+        document.getElementById('lab-content').innerHTML = labSubBarHtml('progress')
+          + `<div class="no-data">No pude cargar tu progreso.<br><span style="font-size:0.75rem">${(err && err.message) || err}</span></div>`;
+      }
+    }
+
+    function renderPronProgress() {
+      if (!pronData || !pronProgressCache) return;
+      const rules = pronData.rules || [];
+      const byCode = pronProgressCache.byConceptCode || {};
+
+      // Estado por regla + conteo por estado
+      const counts = { mastered:0, practiced:0, rusty:0, learning:0, unseen:0, new:0 };
+      const stateByRule = {};
+      rules.forEach(r => {
+        const m = byCode['pron-' + r.code];
+        // Sin fila en v_lc_mastery → nunca ha tenido evidencia → 'new'
+        const state = m ? m.state : 'new';
+        stateByRule[r.code] = { state, score: m ? m.score : null, decayed: m ? m.decayed_score : null, n: m ? m.n_evidence : 0 };
+        counts[state] = (counts[state] || 0) + 1;
+      });
+
+      // Resumen: solo estados con al menos 1
+      const summaryHtml = PRON_STATE_ORDER
+        .filter(s => counts[s] > 0)
+        .map(s => {
+          const spec = PRON_STATE_LABELS[s];
+          return `<span class="pron-prog-chip ${spec.cls}">
+                    <span class="pron-prog-chip-dot"></span>
+                    <b>${counts[s]}</b> ${spec.text}
+                  </span>`;
+        }).join('');
+
+      // Barra global: (mastered + practiced) / total como "% dominadas o casi"
+      const total = rules.length;
+      const solid = (counts.mastered || 0) + (counts.practiced || 0);
+      const globalPct = Math.round(solid / total * 100);
+
+      // Grid por categoría
+      const catHtml = ['A', 'B', 'C'].map(cat => {
+        const catRules = rules.filter(r => r.category === cat);
+        if (!catRules.length) return '';
+        const cards = catRules.map(r => {
+          const st = stateByRule[r.code];
+          const spec = PRON_STATE_LABELS[st.state];
+          const pct = (st.score != null) ? Math.round(st.score * 100) : null;
+          return `<button class="pron-prog-card ${spec.cls}" onclick="openPronRule('${r.code}')">
+            <div class="pron-prog-card-top">
+              <span class="pron-prog-card-code">${r.code.toUpperCase()}</span>
+              <span class="pron-prog-card-icon" title="${spec.text}">${spec.icon}</span>
+            </div>
+            <div class="pron-prog-card-title">${r.title_es}</div>
+            <div class="pron-prog-card-foot">
+              ${pct != null ? `<span class="pron-prog-card-pct">${pct}%</span>` : `<span class="pron-prog-card-pct pron-prog-new">—</span>`}
+              <span class="pron-prog-card-n">${st.n} intentos</span>
+            </div>
+          </button>`;
+        }).join('');
+        return `<div class="pron-prog-cat">
+          <div class="pron-prog-cat-t">${cat} · ${PRON_CAT_LABELS[cat]}</div>
+          <div class="pron-prog-grid">${cards}</div>
+        </div>`;
+      }).join('');
+
+      document.getElementById('lab-content').innerHTML = `
+        ${labSubBarHtml('progress')}
+        <p class="today-sub" style="text-align:center; margin-bottom:0.6rem">Tu dominio de las 22 reglas ✨</p>
+        <div class="pron-prog-summary">
+          <div class="pron-prog-summary-bar">
+            <div class="pron-prog-summary-fill" style="width:${globalPct}%"></div>
+          </div>
+          <div class="pron-prog-summary-lbl">${solid} de ${total} sólidas · ${globalPct}%</div>
+          <div class="pron-prog-summary-chips">${summaryHtml}</div>
+        </div>
+        ${catHtml}`;
+      window.scrollTo({ top: 0, behavior: 'smooth' });
     }
 
     // ╔══════════════════════════════════════════════════════════╗

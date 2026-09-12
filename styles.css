@@ -1977,3 +1977,127 @@
       margin-top: 0.5rem;
     }
 
+    /* ─────────────────────────────────────────────────────────
+       PANEL DE PROGRESO · Reglas de Oro (F7)
+       ───────────────────────────────────────────────────────── */
+    .pron-prog-summary {
+      background: var(--bg-card, #131529);
+      border: 1px solid var(--border, rgba(148,163,184,0.15));
+      border-radius: 14px;
+      padding: 1rem 1.1rem;
+      margin: 0 0 1.2rem;
+    }
+    .pron-prog-summary-bar {
+      height: 8px;
+      background: rgba(148, 163, 184, 0.15);
+      border-radius: 999px;
+      overflow: hidden;
+    }
+    .pron-prog-summary-fill {
+      height: 100%;
+      background: linear-gradient(90deg, #a855f7, #10b981);
+      transition: width 0.5s ease;
+    }
+    .pron-prog-summary-lbl {
+      text-align: center;
+      color: var(--text-muted, #9aa0b8);
+      font-size: 0.85rem;
+      margin: 0.55rem 0 0.75rem;
+    }
+    .pron-prog-summary-chips {
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: center;
+      gap: 0.5rem;
+    }
+    .pron-prog-chip {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.4rem;
+      font-size: 0.78rem;
+      padding: 0.3rem 0.6rem;
+      border-radius: 999px;
+      background: rgba(148, 163, 184, 0.1);
+      color: var(--text-muted, #9aa0b8);
+      border: 1px solid transparent;
+    }
+    .pron-prog-chip b { color: inherit; font-weight: 700; }
+    .pron-prog-chip-dot {
+      width: 0.55rem;
+      height: 0.55rem;
+      border-radius: 50%;
+      background: currentColor;
+      opacity: 0.85;
+    }
+
+    /* Colores por estado (chip y card comparten variables) */
+    .st-mastered  { color: #10b981; }
+    .st-mastered.pron-prog-chip  { background: rgba(16, 185, 129, 0.1); border-color: rgba(16, 185, 129, 0.3); }
+    .st-practiced { color: #38bdf8; }
+    .st-practiced.pron-prog-chip { background: rgba(56, 189, 248, 0.1); border-color: rgba(56, 189, 248, 0.3); }
+    .st-rusty     { color: #eab308; }
+    .st-rusty.pron-prog-chip     { background: rgba(234, 179, 8, 0.1);  border-color: rgba(234, 179, 8, 0.3); }
+    .st-learning  { color: #a855f7; }
+    .st-learning.pron-prog-chip  { background: rgba(168, 85, 247, 0.1); border-color: rgba(168, 85, 247, 0.3); }
+    .st-unseen    { color: #94a3b8; }
+    .st-unseen.pron-prog-chip    { background: rgba(148, 163, 184, 0.1); border-color: rgba(148, 163, 184, 0.3); }
+    .st-new       { color: #64748b; }
+    .st-new.pron-prog-chip       { background: rgba(100, 116, 139, 0.1); border-color: rgba(100, 116, 139, 0.3); }
+
+    .pron-prog-cat { margin: 0 0 1.1rem; }
+    .pron-prog-cat-t {
+      font-size: 0.78rem;
+      color: var(--text-muted, #9aa0b8);
+      text-transform: uppercase;
+      letter-spacing: 0.6px;
+      margin-bottom: 0.5rem;
+      padding-left: 0.2rem;
+    }
+    .pron-prog-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+      gap: 0.55rem;
+    }
+    .pron-prog-card {
+      display: flex;
+      flex-direction: column;
+      gap: 0.35rem;
+      background: var(--bg-card, #131529);
+      border: 1px solid var(--border, rgba(148,163,184,0.15));
+      border-left: 3px solid currentColor;
+      border-radius: 10px;
+      padding: 0.6rem 0.7rem;
+      cursor: pointer;
+      transition: transform 0.12s ease, background 0.15s ease;
+      text-align: left;
+      font: inherit;
+    }
+    .pron-prog-card:hover { transform: translateY(-1px); background: rgba(168, 85, 247, 0.05); }
+    .pron-prog-card-top { display: flex; justify-content: space-between; align-items: center; }
+    .pron-prog-card-code {
+      font-family: 'Courier New', monospace;
+      font-size: 0.72rem;
+      font-weight: 700;
+      letter-spacing: 0.5px;
+    }
+    .pron-prog-card-icon { font-size: 1rem; }
+    .pron-prog-card-title {
+      font-size: 0.82rem;
+      line-height: 1.25;
+      color: var(--text, #e5e7eb);
+      font-weight: 500;
+    }
+    .pron-prog-card-foot {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-top: auto;
+      padding-top: 0.2rem;
+    }
+    .pron-prog-card-pct { font-size: 0.85rem; font-weight: 700; }
+    .pron-prog-new { color: var(--text-muted, #9aa0b8); }
+    .pron-prog-card-n {
+      font-size: 0.7rem;
+      color: var(--text-muted, #9aa0b8);
+    }
+
