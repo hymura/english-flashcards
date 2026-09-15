@@ -2312,6 +2312,36 @@
       transition: background 0.15s ease;
     }
     .pattern-full-play:hover { background: rgba(168, 85, 247, 0.35); }
+    .pattern-mic-btn {
+      background: rgba(56, 189, 248, 0.2);
+      border: none;
+      color: #7dd3fc;
+      width: 2.2rem;
+      height: 2.2rem;
+      border-radius: 50%;
+      font-size: 1rem;
+      cursor: pointer;
+      transition: background 0.15s ease, transform 0.15s ease;
+    }
+    .pattern-mic-btn:hover { background: rgba(56, 189, 248, 0.35); }
+    .pattern-mic-btn.listening {
+      background: rgba(239, 68, 68, 0.3);
+      color: #fca5a5;
+      animation: pattern-mic-pulse 1s ease-in-out infinite;
+    }
+    @keyframes pattern-mic-pulse {
+      0%, 100% { transform: scale(1); }
+      50%      { transform: scale(1.08); }
+    }
+    .pattern-mic-fb {
+      margin-top: 0.7rem;
+      padding: 0.7rem 0.85rem;
+      background: rgba(15, 23, 42, 0.4);
+      border: 1px solid rgba(148, 163, 184, 0.15);
+      border-radius: 10px;
+      font-size: 0.85rem;
+      text-align: left;
+    }
 
     .pattern-next {
       display: block;

@@ -1603,7 +1603,8 @@
     // ║  legacy llegan en G3; dual-write al Core en G4.          ║
     // ╚══════════════════════════════════════════════════════════╝
     let patternsData = null;         // { patterns: [...], byPattern: { 'want-to': [card,...] } }
-    let currentPatternDrill = null;  // { patternCode, cards, idx, step }
+    let currentPatternDrill = null;  // { patternCode, cards, idx, step, micUsed }
+    let patternMicRecorder = null, patternMicChunks = [], patternMicRecog = null, patternMicListening = false;
 
     async function loadPatterns() {
       document.getElementById('patterns-content').innerHTML =
@@ -1664,7 +1665,7 @@
       const p = patternsData.patterns.find(x => x.code === patternCode);
       const cards = (patternsData.byPattern[patternCode] || []).slice();
       if (!p || !cards.length) return;
-      currentPatternDrill = { pattern: p, cards, idx: 0, step: 0 };
+      currentPatternDrill = { pattern: p, cards, idx: 0, step: 0, micUsed: false };
       renderPatternDrill();
     }
 
@@ -1713,11 +1714,13 @@
             <div class="pattern-full-en-row">
               <span class="pattern-full-en">${c.full_en}</span>
               <button class="pattern-full-play" onclick="speakEnglish('${spk(c.full_en)}', this)" title="Escuchar">🔊</button>
+              <button class="pattern-mic-btn" id="pattern-mic-btn" onclick="togglePatternMic()" title="Dilo en voz alta">🎤</button>
             </div>
+            <div class="pattern-mic-fb hidden" id="pattern-mic-fb"></div>
           </div>
 
           <button class="pattern-next" onclick="${primaryFn}">${primaryLabel}</button>
-          ${step < 4 ? `<div class="pattern-drill-hint">Piensa la traducción antes de tocar “${primaryLabel.replace(/ →| ✨/g,'')}”</div>` : ''}
+          ${step < 4 ? `<div class="pattern-drill-hint">Piensa la traducción antes de tocar “${primaryLabel.replace(/ →| ✨/g,'')}”</div>` : `<div class="pattern-drill-hint">Puedes decirla en voz alta 🎤 o pasar directo a la siguiente</div>`}
         </div>`;
       window.scrollTo({ top: 0, behavior: 'smooth' });
     }
@@ -1730,13 +1733,141 @@
 
     function nextPatternCard() {
       if (!currentPatternDrill) return;
-      const { cards, idx } = currentPatternDrill;
+      stopPatternMic();
+      // Si el usuario NO usó el mic pero llegó a ver la frase completa,
+      // se registra evidencia mínima (mode='drill', outcome='pass'). Si sí usó
+      // mic ya se insertó con el score real, no duplicamos.
+      const { cards, idx, step, micUsed } = currentPatternDrill;
+      if (step >= 4 && !micUsed) {
+        insertPatternProgress(cards[idx].id, 'drill', 'pass', null);
+      }
       if (idx < cards.length - 1) {
         currentPatternDrill.idx += 1;
         currentPatternDrill.step = 0;
+        currentPatternDrill.micUsed = false;
         renderPatternDrill();
       } else {
         renderPatternDrillResult();
+      }
+    }
+
+    // ── Insert legacy en phrase_pattern_progress ────────────────────
+    // Sólo si hay usuario autenticado. Best-effort, nunca bloquea UI.
+    // (En G4 se añade dual-write al Core justo aquí.)
+    function insertPatternProgress(cardId, mode, outcome, score) {
+      if (!currentUser || !currentUser.id || cardId == null) return;
+      sb.from('phrase_pattern_progress').insert({
+        card_id: cardId,
+        mode,
+        outcome,
+        score
+      }).then(({ error }) => {
+        if (error) console.warn('phrase_pattern_progress insert:', error.message);
+      });
+    }
+
+    // ── Micrófono para la frase completa ────────────────────────────
+    function togglePatternMic() {
+      patternMicListening ? stopPatternMic() : startPatternMic();
+    }
+
+    async function startPatternMic() {
+      if (!currentPatternDrill) return;
+      const { cards, idx } = currentPatternDrill;
+      const c = cards[idx];
+      const expected = c.full_en;
+      const btn = document.getElementById('pattern-mic-btn');
+      const fb  = document.getElementById('pattern-mic-fb');
+      if (!fb || !btn) return;
+      fb.classList.remove('hidden');
+      fb.innerHTML = '🎤 Escuchando...';
+
+      if (useCloudSTT()) {
+        let stream;
+        try { stream = await navigator.mediaDevices.getUserMedia({ audio: true }); }
+        catch (e) { fb.innerHTML = 'No pude acceder al micrófono.'; return; }
+        patternMicChunks = [];
+        let opts = {};
+        if (window.MediaRecorder && MediaRecorder.isTypeSupported) {
+          if (MediaRecorder.isTypeSupported('audio/webm'))     opts = { mimeType: 'audio/webm' };
+          else if (MediaRecorder.isTypeSupported('audio/mp4')) opts = { mimeType: 'audio/mp4' };
+        }
+        try { patternMicRecorder = new MediaRecorder(stream, opts); }
+        catch (e) { patternMicRecorder = new MediaRecorder(stream); }
+        patternMicRecorder.ondataavailable = e => { if (e.data && e.data.size > 0) patternMicChunks.push(e.data); };
+        patternMicRecorder.onstop = async () => {
+          stream.getTracks().forEach(t => t.stop());
+          const type = (patternMicChunks[0] && patternMicChunks[0].type) || 'audio/webm';
+          const blob = new Blob(patternMicChunks, { type });
+          patternMicChunks = [];
+          if (blob.size < 1200) { fb.innerHTML = 'No te escuché. Intenta de nuevo 🎤'; return; }
+          fb.innerHTML = '⏳ Comparando...';
+          try {
+            const ext = type.includes('mp4') ? 'mp4' : 'webm';
+            const form = new FormData();
+            form.append('file', blob, 'audio.' + ext);
+            form.append('language', 'en');
+            const { data, error } = await sb.functions.invoke('transcribe', { body: form });
+            if (error) throw new Error(error.message);
+            const said = (data && data.text ? data.text : '').trim();
+            gradePatternMic(expected, said);
+          } catch (e) { fb.innerHTML = 'Error: ' + (e.message || e); }
+        };
+        patternMicRecorder.start();
+        patternMicListening = true; btn.classList.add('listening');
+        fb.innerHTML = '🔴 Grabando... oprime otra vez al terminar';
+      } else {
+        const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+        if (!SR) { fb.innerHTML = 'Tu navegador no soporta reconocimiento de voz.'; return; }
+        patternMicRecog = new SR();
+        patternMicRecog.lang = 'en-US'; patternMicRecog.interimResults = false; patternMicRecog.maxAlternatives = 3;
+        patternMicRecog.onstart = () => { patternMicListening = true; btn.classList.add('listening'); fb.innerHTML = '🔴 Escuchando... di la frase'; };
+        patternMicRecog.onresult = e => {
+          let best = e.results[0][0].transcript, bs = scorePronunciation(expected, best);
+          for (let k = 1; k < e.results[0].length; k++) {
+            const alt = e.results[0][k].transcript, s = scorePronunciation(expected, alt);
+            if (s.pct > bs.pct) { bs = s; best = alt; }
+          }
+          gradePatternMic(expected, best);
+        };
+        patternMicRecog.onerror = e => { if (e.error === 'no-speech') fb.innerHTML = 'No te escuché 🎤'; stopPatternMic(); };
+        patternMicRecog.onend   = () => stopPatternMic();
+        patternMicRecog.start();
+      }
+    }
+
+    function stopPatternMic() {
+      patternMicListening = false;
+      const btn = document.getElementById('pattern-mic-btn');
+      if (btn) btn.classList.remove('listening');
+      if (patternMicRecog) { try { patternMicRecog.stop(); } catch (e) {} patternMicRecog = null; }
+      if (patternMicRecorder && patternMicRecorder.state !== 'inactive') { try { patternMicRecorder.stop(); } catch (e) {} }
+    }
+
+    function gradePatternMic(expected, said) {
+      stopPatternMic();
+      const fb = document.getElementById('pattern-mic-fb');
+      if (!fb) return;
+      fb.classList.remove('hidden');
+      if (!said) { fb.innerHTML = 'No entendí. Intenta de nuevo 🎤'; return; }
+      const score = scorePronunciation(expected, said);
+      const chips = score.wordResult.map(w =>
+        `<span class="word-chip ${w.ok ? 'word-ok' : 'word-miss'}">${w.word}</span>`).join('');
+      const cls = score.pct >= 80 ? 'score-great' : score.pct >= 50 ? 'score-good' : 'score-try';
+      fb.innerHTML = `
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:0.4rem">
+          <b>${score.pct >= 80 ? '🏆 ¡Muy bien!' : score.pct >= 50 ? '💪 Sigue puliendo' : '🔄 Repite'}</b>
+          <span class="score-badge ${cls}">${score.pct}%</span>
+        </div>
+        <div class="word-row" style="margin-bottom:0.3rem">${chips}</div>
+        <div style="color:var(--text-muted); font-size:0.78rem">Dijiste: “${said}”</div>`;
+
+      // Legacy autoritativo · phrase_pattern_progress (mode='mic')
+      if (currentPatternDrill && !currentPatternDrill.micUsed) {
+        currentPatternDrill.micUsed = true;
+        const outcome = score.pct >= 80 ? 'pass' : (score.pct >= 50 ? 'partial' : 'fail');
+        const cardId = currentPatternDrill.cards[currentPatternDrill.idx].id;
+        insertPatternProgress(cardId, 'mic', outcome, +(score.pct / 100).toFixed(2));
       }
     }
 
@@ -1760,6 +1891,7 @@
     }
 
     function exitPatternDrill() {
+      stopPatternMic();
       currentPatternDrill = null;
       renderPatternsIndex();
     }
@@ -3146,10 +3278,11 @@ U15: 55=Añadir · 56=Contrastar · 57=Causa/efecto · 58=Tiempo · 59=Ilustrar 
       document.getElementById('view-patterns').classList.toggle('hidden', name !== 'patterns');
       document.getElementById('view-chat').classList.toggle('hidden', name !== 'chat');
       document.getElementById('view-dict').classList.toggle('hidden', name !== 'dict');
-      if (name !== 'shadow') stopShadowMic();
-      if (name !== 'lab')    stopLabMic();
-      if (name !== 'chat')   stopChatMic();
-      if (name !== 'dict')   stopDictMic();
+      if (name !== 'shadow')   stopShadowMic();
+      if (name !== 'lab')      stopLabMic();
+      if (name !== 'chat')     stopChatMic();
+      if (name !== 'dict')     stopDictMic();
+      if (name !== 'patterns') stopPatternMic();
       if (name === 'grammar')  loadGrammar();
       if (name === 'verbs')    loadVerbs();
       if (name === 'linkers')  loadLinkers();
