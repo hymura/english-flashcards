@@ -1596,6 +1596,175 @@
     }
 
     // ╔══════════════════════════════════════════════════════════╗
+    // ║  PATRONES · Drill japonés (Fase G2 · V1)                 ║
+    // ║  Sección nueva del sidebar. Cada ficha se revela por     ║
+    // ║  capas (estructura → paso 1 → paso 2 → paso 3 → full).   ║
+    // ║  G2 = solo UI, sin mic ni persistencia. Mic + insert al  ║
+    // ║  legacy llegan en G3; dual-write al Core en G4.          ║
+    // ╚══════════════════════════════════════════════════════════╝
+    let patternsData = null;         // { patterns: [...], byPattern: { 'want-to': [card,...] } }
+    let currentPatternDrill = null;  // { patternCode, cards, idx, step }
+
+    async function loadPatterns() {
+      document.getElementById('patterns-content').innerHTML =
+        '<div class="no-data">Cargando patrones...</div>';
+      try {
+        const pQ = await sb.from('phrase_patterns')
+          .select('id, code, structure_en, structure_es, cefr_level, ordinal, is_question, notes_md')
+          .order('ordinal', { ascending: true });
+        if (pQ.error) throw pQ.error;
+        const cQ = await sb.from('phrase_pattern_cards')
+          .select('id, pattern_id, ordinal, step1_es, step1_en, step2_es, step2_en, step3_es, step3_en, full_es, full_en')
+          .order('pattern_id', { ascending: true }).order('ordinal', { ascending: true });
+        if (cQ.error) throw cQ.error;
+
+        const byPatternId = {};
+        (cQ.data || []).forEach(c => { (byPatternId[c.pattern_id] = byPatternId[c.pattern_id] || []).push(c); });
+        const byPattern = {};
+        (pQ.data || []).forEach(p => { byPattern[p.code] = byPatternId[p.id] || []; });
+
+        patternsData = { patterns: pQ.data || [], byPattern };
+        renderPatternsIndex();
+      } catch (err) {
+        document.getElementById('patterns-content').innerHTML =
+          `<div class="no-data">No pude cargar los patrones.<br><span style="font-size:0.75rem">${(err && err.message) || err}</span></div>`;
+      }
+    }
+
+    function renderPatternsIndex() {
+      currentPatternDrill = null;
+      if (!patternsData || !patternsData.patterns.length) {
+        document.getElementById('patterns-content').innerHTML =
+          '<div class="no-data">No hay patrones cargados todavía.</div>';
+        return;
+      }
+      const cards = patternsData.patterns.map(p => {
+        const nCards = (patternsData.byPattern[p.code] || []).length;
+        return `<button class="pattern-card" onclick="startPatternDrill('${p.code}')">
+          <div class="pattern-card-en">${p.structure_en}</div>
+          <div class="pattern-card-es">${p.structure_es}</div>
+          <div class="pattern-card-foot">
+            <span class="pattern-card-count">${nCards} ${nCards === 1 ? 'ficha' : 'fichas'}</span>
+            <span class="pattern-card-lvl">${p.cefr_level}</span>
+            <span class="pattern-card-cta">Practicar →</span>
+          </div>
+        </button>`;
+      }).join('');
+
+      document.getElementById('patterns-content').innerHTML = `
+        <p class="today-sub" style="text-align:center; margin-bottom:1rem">
+          Construye frases desde cero con los patrones que más vas a usar ✨
+        </p>
+        <div class="pattern-grid">${cards}</div>`;
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+
+    function startPatternDrill(patternCode) {
+      if (!patternsData) return;
+      const p = patternsData.patterns.find(x => x.code === patternCode);
+      const cards = (patternsData.byPattern[patternCode] || []).slice();
+      if (!p || !cards.length) return;
+      currentPatternDrill = { pattern: p, cards, idx: 0, step: 0 };
+      renderPatternDrill();
+    }
+
+    function renderPatternDrill() {
+      if (!currentPatternDrill) return;
+      const { pattern, cards, idx, step } = currentPatternDrill;
+      const total = cards.length;
+      const c = cards[idx];
+      const pct = Math.round((idx) / total * 100);
+
+      const stepRow = (n, es, en) => `
+        <div class="pattern-step ${step >= n ? 'shown' : 'hidden'}">
+          <div class="pattern-step-es">${es}</div>
+          <div class="pattern-step-arrow">→</div>
+          <div class="pattern-step-en">${en}</div>
+        </div>`;
+
+      // step = 0 → solo estructura; 1..3 → paso i revelado; 4 → frase completa
+      const spk = t => (t || '').replace(/'/g, "\\'").replace(/"/g, '&quot;');
+      const isLast = idx === total - 1;
+      const primaryLabel = step < 4
+        ? (step === 0 ? 'Mostrar paso 1 →' : step === 1 ? 'Mostrar paso 2 →' : step === 2 ? 'Mostrar paso 3 →' : 'Ver frase completa ✨')
+        : (isLast ? 'Ver resultado 🏁' : 'Siguiente ficha →');
+      const primaryFn = step < 4 ? 'revealNextPatternStep()' : 'nextPatternCard()';
+
+      document.getElementById('patterns-content').innerHTML = `
+        <div class="pattern-drill-top">
+          <button class="lab-back" onclick="exitPatternDrill()">← Salir</button>
+          <div class="pattern-drill-progress">Ficha ${idx + 1} de ${total}</div>
+        </div>
+        <div class="pattern-quiz-bar"><div class="pattern-quiz-bar-fill" style="width:${pct}%"></div></div>
+
+        <div class="pattern-drill-card">
+          <div class="pattern-struct-label">ESTRUCTURA</div>
+          <div class="pattern-struct-en">${pattern.structure_en}</div>
+          <div class="pattern-struct-es">${pattern.structure_es}</div>
+
+          <div class="pattern-steps">
+            ${stepRow(1, c.step1_es, c.step1_en)}
+            ${stepRow(2, c.step2_es, c.step2_en)}
+            ${stepRow(3, c.step3_es, c.step3_en)}
+          </div>
+
+          <div class="pattern-full ${step >= 4 ? 'shown' : 'hidden'}">
+            <div class="pattern-full-es">${c.full_es}</div>
+            <div class="pattern-full-en-row">
+              <span class="pattern-full-en">${c.full_en}</span>
+              <button class="pattern-full-play" onclick="speakEnglish('${spk(c.full_en)}', this)" title="Escuchar">🔊</button>
+            </div>
+          </div>
+
+          <button class="pattern-next" onclick="${primaryFn}">${primaryLabel}</button>
+          ${step < 4 ? `<div class="pattern-drill-hint">Piensa la traducción antes de tocar “${primaryLabel.replace(/ →| ✨/g,'')}”</div>` : ''}
+        </div>`;
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+
+    function revealNextPatternStep() {
+      if (!currentPatternDrill) return;
+      currentPatternDrill.step = Math.min(4, currentPatternDrill.step + 1);
+      renderPatternDrill();
+    }
+
+    function nextPatternCard() {
+      if (!currentPatternDrill) return;
+      const { cards, idx } = currentPatternDrill;
+      if (idx < cards.length - 1) {
+        currentPatternDrill.idx += 1;
+        currentPatternDrill.step = 0;
+        renderPatternDrill();
+      } else {
+        renderPatternDrillResult();
+      }
+    }
+
+    function renderPatternDrillResult() {
+      if (!currentPatternDrill) return;
+      const { pattern, cards } = currentPatternDrill;
+      document.getElementById('patterns-content').innerHTML = `
+        <div class="pattern-result">
+          <div class="pattern-result-emoji">🎉</div>
+          <div class="pattern-result-msg">¡Terminaste!</div>
+          <div class="pattern-result-detail">Practicaste ${cards.length} fichas del patrón</div>
+          <div class="pattern-result-struct">${pattern.structure_en}</div>
+          <div class="pattern-result-struct-es">${pattern.structure_es}</div>
+          <div class="pattern-result-actions">
+            <button class="pattern-next" onclick="startPatternDrill('${pattern.code}')">🔁 Repetir</button>
+            <button class="lab-back" style="margin:0" onclick="renderPatternsIndex()">← Volver a patrones</button>
+          </div>
+        </div>`;
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+      currentPatternDrill = null;
+    }
+
+    function exitPatternDrill() {
+      currentPatternDrill = null;
+      renderPatternsIndex();
+    }
+
+    // ╔══════════════════════════════════════════════════════════╗
     // ║  CONVERSACIÓN IA (chat con Groq/Llama)                   ║
     // ╚══════════════════════════════════════════════════════════╝
     let chatHistory = [];       // [{role:'user'|'assistant', content, evaluation?, evalOpen?}]
@@ -2974,20 +3143,22 @@ U15: 55=Añadir · 56=Contrastar · 57=Causa/efecto · 58=Tiempo · 59=Ilustrar 
       document.getElementById('view-shadow').classList.toggle('hidden', name !== 'shadow');
       document.getElementById('view-today').classList.toggle('hidden', name !== 'today');
       document.getElementById('view-lab').classList.toggle('hidden', name !== 'lab');
+      document.getElementById('view-patterns').classList.toggle('hidden', name !== 'patterns');
       document.getElementById('view-chat').classList.toggle('hidden', name !== 'chat');
       document.getElementById('view-dict').classList.toggle('hidden', name !== 'dict');
       if (name !== 'shadow') stopShadowMic();
       if (name !== 'lab')    stopLabMic();
       if (name !== 'chat')   stopChatMic();
       if (name !== 'dict')   stopDictMic();
-      if (name === 'grammar') loadGrammar();
-      if (name === 'verbs')   loadVerbs();
-      if (name === 'linkers') loadLinkers();
-      if (name === 'shadow')  loadShadow();
-      if (name === 'today')   renderToday();
-      if (name === 'lab')     loadLab();
-      if (name === 'chat')    loadChat();
-      if (name === 'dict')    setTimeout(() => document.getElementById('dict-input').focus(), 100);
+      if (name === 'grammar')  loadGrammar();
+      if (name === 'verbs')    loadVerbs();
+      if (name === 'linkers')  loadLinkers();
+      if (name === 'shadow')   loadShadow();
+      if (name === 'today')    renderToday();
+      if (name === 'lab')      loadLab();
+      if (name === 'patterns') loadPatterns();
+      if (name === 'chat')     loadChat();
+      if (name === 'dict')     setTimeout(() => document.getElementById('dict-input').focus(), 100);
       // El "+" (agregar frase) solo donde las frases son relevantes
       const fabViews = ['today', 'flashcards', 'shadow'];
       document.getElementById('fab-add').classList.toggle('hidden', !currentUser || !fabViews.includes(name));

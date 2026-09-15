@@ -64,6 +64,9 @@
       <button class="nav-tab" data-view="verbs" onclick="switchView('verbs', this)">
         <svg viewBox="0 0 24 24"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><circle cx="4" cy="6" r="1"/><circle cx="4" cy="12" r="1"/><circle cx="4" cy="18" r="1"/></svg><span>Verbos</span>
       </button>
+      <button class="nav-tab" data-view="patterns" onclick="switchView('patterns', this)">
+        <svg viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg><span>Patrones</span>
+      </button>
       <button class="nav-tab" data-view="linkers" onclick="switchView('linkers', this)">
         <svg viewBox="0 0 24 24"><path d="M10 13a5 5 0 0 0 7 0l3-3a5 5 0 0 0-7-7l-1 1"/><path d="M14 11a5 5 0 0 0-7 0l-3 3a5 5 0 0 0 7 7l1-1"/></svg><span>Conectores</span>
       </button>
@@ -187,6 +190,11 @@
   </div>
 
   <!-- ── VIEW: Laboratorio de Pronunciación ── -->
+  <!-- ── VIEW: Patrones (drill japonés) ── -->
+  <div class="study-view hidden" id="view-patterns">
+    <div id="patterns-content"><div class="no-data">Cargando patrones...</div></div>
+  </div>
+
   <div class="study-view hidden" id="view-lab">
     <div id="lab-content"><div class="no-data">Cargando sonidos...</div></div>
   </div>
