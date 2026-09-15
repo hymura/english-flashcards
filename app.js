@@ -1620,6 +1620,8 @@
     let patternsData = null;         // { patterns: [...], byPattern: { 'want-to': [card,...] } }
     let currentPatternDrill = null;  // { patternCode, cards, idx, step, micUsed }
     let patternMicRecorder = null, patternMicChunks = [], patternMicRecog = null, patternMicListening = false;
+    let patternsSubView = 'index';   // 'index' | 'progress'
+    let patternsProgressCache = null; // { byConceptCode: { 'pattern-want-to': {score, decayed, state, n_evidence} } }
 
     async function loadPatterns() {
       document.getElementById('patterns-content').innerHTML =
@@ -1647,11 +1649,28 @@
       }
     }
 
+    function patternsSubBarHtml(active) {
+      const btn = (id, label) =>
+        `<button class="lab-sub-btn ${active === id ? 'active' : ''}" onclick="setPatternsSubView('${id}')">${label}</button>`;
+      return `<div class="lab-sub-bar">
+        ${btn('index', '◆ Practicar')}
+        ${btn('progress', '📊 Mi progreso')}
+      </div>`;
+    }
+
+    function setPatternsSubView(sub) {
+      patternsSubView = sub;
+      stopPatternMic();
+      if (sub === 'progress') loadPatternsProgress();
+      else renderPatternsIndex();
+    }
+
     function renderPatternsIndex() {
+      patternsSubView = 'index';
       currentPatternDrill = null;
       if (!patternsData || !patternsData.patterns.length) {
-        document.getElementById('patterns-content').innerHTML =
-          '<div class="no-data">No hay patrones cargados todavía.</div>';
+        document.getElementById('patterns-content').innerHTML = patternsSubBarHtml('index')
+          + '<div class="no-data">No hay patrones cargados todavía.</div>';
         return;
       }
       const cards = patternsData.patterns.map(p => {
@@ -1668,10 +1687,126 @@
       }).join('');
 
       document.getElementById('patterns-content').innerHTML = `
+        ${patternsSubBarHtml('index')}
         <p class="today-sub" style="text-align:center; margin-bottom:1rem">
           Construye frases desde cero con los patrones que más vas a usar ✨
         </p>
         <div class="pattern-grid">${cards}</div>`;
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+
+    // ── Panel Mi progreso (G5) ──────────────────────────────────────
+    async function loadPatternsProgress() {
+      patternsSubView = 'progress';
+      document.getElementById('patterns-content').innerHTML =
+        patternsSubBarHtml('progress') + '<div class="no-data">Cargando tu progreso...</div>';
+
+      if (!currentUser || !currentUser.id) {
+        document.getElementById('patterns-content').innerHTML = patternsSubBarHtml('progress')
+          + `<div class="no-data">
+               <div style="font-size:2rem; margin-bottom:0.5rem">🔒</div>
+               Inicia sesión para ver tu progreso en los 30 patrones.
+             </div>`;
+        return;
+      }
+
+      try {
+        if (!patternsData) await loadPatterns();  // por si el usuario entra directo a Progreso
+        // 1. skill 'produce'
+        const { data: sk, error: eSk } = await sb.from('lc_skill')
+          .select('id').eq('code', 'produce').single();
+        if (eSk || !sk) throw eSk || new Error('skill produce not found');
+        // 2. Conceptos pattern-* → id + code
+        const { data: concepts, error: eC } = await sb.from('lc_concept')
+          .select('id, code').like('code', 'pattern-%');
+        if (eC) throw eC;
+        const idToCode = new Map((concepts || []).map(c => [c.id, c.code]));
+        const conceptIds = (concepts || []).map(c => c.id);
+        // 3. v_lc_mastery (RLS aplica → solo del usuario)
+        let masteryByCode = {};
+        if (conceptIds.length) {
+          const { data: mast, error: eM } = await sb.from('v_lc_mastery')
+            .select('concept_id, score, decayed_score, state, n_evidence')
+            .in('concept_id', conceptIds)
+            .eq('skill_id', sk.id);
+          if (eM) throw eM;
+          (mast || []).forEach(m => {
+            const code = idToCode.get(m.concept_id);
+            if (code) masteryByCode[code] = m;
+          });
+        }
+        patternsProgressCache = { byConceptCode: masteryByCode };
+        renderPatternsProgress();
+      } catch (err) {
+        document.getElementById('patterns-content').innerHTML = patternsSubBarHtml('progress')
+          + `<div class="no-data">No pude cargar tu progreso.<br><span style="font-size:0.75rem">${(err && err.message) || err}</span></div>`;
+      }
+    }
+
+    function renderPatternsProgress() {
+      if (!patternsData || !patternsProgressCache) return;
+      const patterns = patternsData.patterns || [];
+      const byCode   = patternsProgressCache.byConceptCode || {};
+
+      const counts = { mastered:0, practiced:0, rusty:0, learning:0, unseen:0, new:0 };
+      const stateByPattern = {};
+      patterns.forEach(p => {
+        const m = byCode['pattern-' + p.code];
+        const state = m ? m.state : 'new';
+        stateByPattern[p.code] = {
+          state,
+          score:   m ? m.score : null,
+          decayed: m ? m.decayed_score : null,
+          n:       m ? m.n_evidence : 0
+        };
+        counts[state] = (counts[state] || 0) + 1;
+      });
+
+      const summaryHtml = PRON_STATE_ORDER
+        .filter(s => counts[s] > 0)
+        .map(s => {
+          const spec = PRON_STATE_LABELS[s];
+          return `<span class="pron-prog-chip ${spec.cls}">
+                    <span class="pron-prog-chip-dot"></span>
+                    <b>${counts[s]}</b> ${spec.text}
+                  </span>`;
+        }).join('');
+
+      const total = patterns.length;
+      const solid = (counts.mastered || 0) + (counts.practiced || 0);
+      const globalPct = Math.round(solid / total * 100);
+
+      const cards = patterns.map(p => {
+        const st = stateByPattern[p.code];
+        const spec = PRON_STATE_LABELS[st.state];
+        const pct = (st.score != null) ? Math.round(st.score * 100) : null;
+        return `<button class="pron-prog-card ${spec.cls}" onclick="startPatternDrill('${p.code}')">
+          <div class="pron-prog-card-top">
+            <span class="pron-prog-card-code">${p.code.toUpperCase()}</span>
+            <span class="pron-prog-card-icon" title="${spec.text}">${spec.icon}</span>
+          </div>
+          <div class="pron-prog-card-title">${p.structure_en}</div>
+          <div class="pron-prog-card-foot">
+            ${pct != null ? `<span class="pron-prog-card-pct">${pct}%</span>` : `<span class="pron-prog-card-pct pron-prog-new">—</span>`}
+            <span class="pron-prog-card-n">${st.n} intentos</span>
+          </div>
+        </button>`;
+      }).join('');
+
+      document.getElementById('patterns-content').innerHTML = `
+        ${patternsSubBarHtml('progress')}
+        <p class="today-sub" style="text-align:center; margin-bottom:0.6rem">Tu dominio de los ${total} patrones ✨</p>
+        <div class="pron-prog-summary">
+          <div class="pron-prog-summary-bar">
+            <div class="pron-prog-summary-fill" style="width:${globalPct}%"></div>
+          </div>
+          <div class="pron-prog-summary-lbl">${solid} de ${total} sólidos · ${globalPct}%</div>
+          <div class="pron-prog-summary-chips">${summaryHtml}</div>
+        </div>
+        <div class="pron-prog-grid">${cards}</div>
+        <div style="text-align:center; color:var(--text-muted); font-size:0.75rem; margin-top:0.75rem">
+          El estado se calcula desde tus intentos con 🎤 (skill "producir"). El drill visual sin mic no cuenta.
+        </div>`;
       window.scrollTo({ top: 0, behavior: 'smooth' });
     }
 
