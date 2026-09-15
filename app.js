@@ -108,6 +108,21 @@
         const outcome = correct ? 'pass' : 'fail';
         await this.recordEvidence(links.map(l => ({ conceptId: l.concept_id, skillId: sk.id, outcome })));
       },
+      // G4 · Dual-write para las cards del drill de Patrones.
+      // skill='produce', content_type='pattern_card', content_id=card_id.
+      // Los 98 puentes están enganchados en lc_content_concept por G4.
+      // outcome ya llega calculado (pass/partial/fail según score del mic).
+      async submitFromPatternCard(cardId, outcome) {
+        if (!this.enabled || !currentUser || cardId == null) return;
+        const { data: sk, error: eSk } = await sb.from('lc_skill')
+          .select('id').eq('code', 'produce').single();
+        if (eSk || !sk) { console.warn('LC.submitFromPatternCard skill:', eSk && eSk.message); return; }
+        const { data: links, error: eCc } = await sb.from('lc_content_concept')
+          .select('concept_id').eq('content_type', 'pattern_card').eq('content_id', cardId);
+        if (eCc) { console.warn('LC.submitFromPatternCard lookup:', eCc.message); return; }
+        if (!links || links.length === 0) return;
+        await this.recordEvidence(links.map(l => ({ conceptId: l.concept_id, skillId: sk.id, outcome })));
+      },
       // F6 · Dual-write para reglas de pronunciación (quiz match).
       // Mismo patrón: skill='recognize', content_type='pron_rule', content_id=rule_id.
       // Los 22 conceptos 'pron-*' están enganchados en lc_content_concept por F3.
@@ -1753,7 +1768,6 @@
 
     // ── Insert legacy en phrase_pattern_progress ────────────────────
     // Sólo si hay usuario autenticado. Best-effort, nunca bloquea UI.
-    // (En G4 se añade dual-write al Core justo aquí.)
     function insertPatternProgress(cardId, mode, outcome, score) {
       if (!currentUser || !currentUser.id || cardId == null) return;
       sb.from('phrase_pattern_progress').insert({
@@ -1764,6 +1778,16 @@
       }).then(({ error }) => {
         if (error) console.warn('phrase_pattern_progress insert:', error.message);
       });
+
+      // ── Learning Core · dual-write (G4) ────────────────────────
+      // Sólo cuando fue producción real con micrófono. mode='drill'
+      // (visto la ficha sin decirla) NO genera evidencia en el Core:
+      // la skill 'produce' se mide con habla real, no con lectura pasiva.
+      if (mode === 'mic' && LC.enabled && typeof LC.submitFromPatternCard === 'function') {
+        LC.submitFromPatternCard(cardId, outcome)
+          .then(() => (typeof lcRefreshAndNotify === 'function') && lcRefreshAndNotify())
+          .catch(e => console.warn('LC dual-write (patterns):', e));
+      }
     }
 
     // ── Micrófono para la frase completa ────────────────────────────
