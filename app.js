@@ -1622,6 +1622,7 @@
     let patternMicRecorder = null, patternMicChunks = [], patternMicRecog = null, patternMicListening = false;
     let patternsSubView = 'index';   // 'index' | 'progress'
     let patternsProgressCache = null; // { byConceptCode: { 'pattern-want-to': {score, decayed, state, n_evidence} } }
+    let patternLvlOpen = { A2: true, B1: false, B2: false }; // secciones plegables por nivel CEFR
 
     async function loadPatterns() {
       document.getElementById('patterns-content').innerHTML =
@@ -1673,7 +1674,8 @@
           + '<div class="no-data">No hay patrones cargados todavía.</div>';
         return;
       }
-      const cards = patternsData.patterns.map(p => {
+
+      const patternCardHtml = (p) => {
         const nCards = (patternsData.byPattern[p.code] || []).length;
         return `<button class="pattern-card" onclick="startPatternDrill('${p.code}')">
           <div class="pattern-card-en">${p.structure_en}</div>
@@ -1684,6 +1686,37 @@
             <span class="pattern-card-cta">Practicar →</span>
           </div>
         </button>`;
+      };
+
+      const LVL_LABEL = {
+        A2: 'Básico · A2',
+        B1: 'Intermedio · B1',
+        B2: 'Avanzado · B2',
+        C1: 'Casi nativo · C1'
+      };
+
+      // Agrupar por nivel manteniendo el orden natural A2 → B1 → B2 → C1
+      const byLvl = {};
+      patternsData.patterns.forEach(p => {
+        const lvl = p.cefr_level || 'A2';
+        (byLvl[lvl] = byLvl[lvl] || []).push(p);
+      });
+      const orderedLvls = ['A2', 'B1', 'B2', 'C1'].filter(l => byLvl[l] && byLvl[l].length);
+
+      const sectionsHtml = orderedLvls.map(lvl => {
+        const open = patternLvlOpen[lvl] !== false; // default true si no está definido
+        const bodyCards = byLvl[lvl].map(patternCardHtml).join('');
+        return `<div class="pattern-lvl">
+          <button class="pattern-lvl-head ${open ? 'open' : ''}" onclick="togglePatternLvl('${lvl}')">
+            <span class="pattern-lvl-caret">${open ? '▾' : '▸'}</span>
+            <span class="pattern-lvl-badge">${lvl}</span>
+            <span class="pattern-lvl-title">${LVL_LABEL[lvl] || lvl}</span>
+            <span class="pattern-lvl-count">${byLvl[lvl].length}</span>
+          </button>
+          <div class="pattern-lvl-body ${open ? '' : 'hidden'}">
+            <div class="pattern-grid">${bodyCards}</div>
+          </div>
+        </div>`;
       }).join('');
 
       document.getElementById('patterns-content').innerHTML = `
@@ -1691,8 +1724,13 @@
         <p class="today-sub" style="text-align:center; margin-bottom:1rem">
           Construye frases desde cero con los patrones que más vas a usar ✨
         </p>
-        <div class="pattern-grid">${cards}</div>`;
+        ${sectionsHtml}`;
       window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+
+    function togglePatternLvl(lvl) {
+      patternLvlOpen[lvl] = !(patternLvlOpen[lvl] !== false);
+      renderPatternsIndex();
     }
 
     // ── Panel Mi progreso (G5) ──────────────────────────────────────

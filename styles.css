@@ -2106,10 +2106,50 @@
        ───────────────────────────────────────────────────────── */
     .pattern-grid {
       display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
-      gap: 0.75rem;
+      grid-template-columns: repeat(auto-fill, minmax(190px, 1fr));
+      gap: 0.55rem;
       padding: 0.3rem 0;
     }
+    .pattern-lvl { margin: 0 0 1.1rem; }
+    .pattern-lvl-head {
+      display: flex;
+      width: 100%;
+      align-items: center;
+      gap: 0.5rem;
+      background: var(--bg-card, #131529);
+      border: 1px solid var(--border, rgba(148,163,184,0.15));
+      border-radius: 10px;
+      padding: 0.6rem 0.85rem;
+      cursor: pointer;
+      color: inherit;
+      font: inherit;
+      transition: background 0.15s ease;
+    }
+    .pattern-lvl-head:hover { background: rgba(168, 85, 247, 0.08); }
+    .pattern-lvl-head.open { border-radius: 10px 10px 0 0; border-bottom-color: transparent; }
+    .pattern-lvl-caret { width: 1rem; font-size: 0.8rem; color: var(--text-muted, #9aa0b8); }
+    .pattern-lvl-title { flex: 1; text-align: left; font-weight: 600; }
+    .pattern-lvl-badge {
+      background: rgba(168, 85, 247, 0.18);
+      color: #c084fc;
+      padding: 0.15rem 0.55rem;
+      border-radius: 999px;
+      font-size: 0.72rem;
+      font-weight: 700;
+    }
+    .pattern-lvl-count {
+      background: rgba(148, 163, 184, 0.15);
+      color: var(--text-muted, #9aa0b8);
+      padding: 0.15rem 0.55rem;
+      border-radius: 999px;
+      font-size: 0.72rem;
+      font-weight: 600;
+    }
+    .pattern-lvl-body { padding: 0.75rem 0.15rem 0.25rem; }
+    .pattern-lvl-body.hidden { display: none; }
+    /* En tarjetas más compactas, hacer texto un poco más pequeño para que quepan */
+    .pattern-card-en { font-size: 0.98rem; }
+    .pattern-card-es { font-size: 0.85rem; }
     .pattern-card {
       display: flex;
       flex-direction: column;
