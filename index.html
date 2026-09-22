@@ -306,7 +306,11 @@
 
     <!-- Modo estudiar -->
     <div id="verb-study">
-      <input class="verb-search" id="verb-search" placeholder="🔎 Buscar verbo (en inglés o español)..." oninput="renderVerbs()" />
+      <div class="lab-sub-bar" id="verb-class-bar">
+        <button class="lab-sub-btn active" onclick="setVerbClass('irregular')">◆ Irregulares</button>
+        <button class="lab-sub-btn" onclick="setVerbClass('regular')">🔄 Regulares</button>
+      </div>
+      <input class="verb-search" id="verb-search" placeholder="🔎 Buscar verbo (en inglés o español)..." oninput="onVerbSearchInput()" />
       <div class="study-cats" id="verb-types"></div>
       <div id="verb-concept-chips" class="section-concept-bar"></div>
       <div class="verb-count" id="verb-count"></div>

@@ -4001,6 +4001,16 @@ U15: 55=Añadir · 56=Contrastar · 57=Causa/efecto · 58=Tiempo · 59=Ilustrar 
 
     // ── Verbos irregulares ────────────────────────────────────────
     let verbsData = null;
+    // ── Verbos regulares (nueva sub-vista R1+R2) ───────────────────
+    let verbClass = 'irregular';        // 'irregular' | 'regular'
+    let regularVerbsData = null;         // caché fetch
+    let activeRegularGroup = 'all';      // 'all' | 't' | 'd' | 'id'
+    const RV_GROUP_META = {
+      all: { icon: '📚', title: 'Todos',   note: '' },
+      t:   { icon: '🔊', title: '/t/',    note: 'suena T' },
+      d:   { icon: '🔊', title: '/d/',    note: 'suena D' },
+      id:  { icon: '🔊', title: '/ɪd/',   note: 'suena ID' }
+    };
 
     let activeVerbType = 'all';
     const VERB_TYPES = [
@@ -4113,6 +4123,111 @@ U15: 55=Añadir · 56=Contrastar · 57=Causa/efecto · 58=Tiempo · 59=Ilustrar 
               <span class="vf">${v.past_participle}${ipa(v.ipa_part)}</span>
             </div>
             <div class="verb-tr">${v.translation}</div>
+            <button class="verb-audio" onclick="speakEnglish('${say}', this)" title="Escuchar">
+              <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M15.54 8.46a5 5 0 0 1 0 7.07"/></svg>
+            </button>
+          </div>`;
+      });
+      document.getElementById('verb-table').innerHTML = html || '<div class="no-data">No se encontraron verbos.</div>';
+    }
+
+    // ╔══════════════════════════════════════════════════════════╗
+    // ║  VERBOS REGULARES · sub-vista R2                         ║
+    // ║  Tabla de 100 verbos regulares agrupados por sonido del  ║
+    // ║  -ED (/t/, /d/, /ɪd/). Reutiliza los mismos slots del    ║
+    // ║  DOM (verb-search, verb-types, verb-count, verb-table)   ║
+    // ║  cambiando qué se pinta según verbClass.                 ║
+    // ╚══════════════════════════════════════════════════════════╝
+    function setVerbClass(cls) {
+      verbClass = cls;
+      // Sincroniza el estado visual del sub-bar
+      document.querySelectorAll('#verb-class-bar .lab-sub-btn').forEach(btn =>
+        btn.classList.toggle('active', btn.textContent.trim().endsWith(cls === 'regular' ? 'Regulares' : 'Irregulares'))
+      );
+      // Limpia el filtro por concepto U14 al saltar de vista
+      document.getElementById('verb-concept-chips').innerHTML = '';
+      document.getElementById('verb-search').value = '';
+      if (cls === 'regular') {
+        document.getElementById('verb-search').placeholder = '🔎 Buscar verbo regular (base, pasado o significado)...';
+        if (regularVerbsData) renderRegularVerbs();
+        else loadRegularVerbs();
+      } else {
+        document.getElementById('verb-search').placeholder = '🔎 Buscar verbo (en inglés o español)...';
+        buildVerbTypePills();
+        renderVerbs();
+      }
+    }
+
+    function onVerbSearchInput() {
+      if (verbClass === 'regular') renderRegularVerbs();
+      else renderVerbs();
+    }
+
+    async function loadRegularVerbs() {
+      document.getElementById('verb-table').innerHTML = '<div class="no-data">Cargando verbos regulares...</div>';
+      const { data, error } = await sb.from('regular_verbs')
+        .select('id, base, past, ipa_base, ipa_past, ed_group, meaning_es, sort_order, freq_bucket')
+        .order('sort_order');
+      if (error) {
+        document.getElementById('verb-table').innerHTML =
+          '<div class="no-data">No pude cargar los verbos regulares.<br><span style="font-size:0.75rem">' + error.message + '</span></div>';
+        return;
+      }
+      regularVerbsData = data || [];
+      renderRegularVerbs();
+    }
+
+    function filterRegularGroup(g) {
+      activeRegularGroup = g;
+      renderRegularVerbs();
+    }
+
+    function renderRegularVerbs() {
+      if (!regularVerbsData) return;
+      // Chips filtro por grupo /t/ /d/ /ɪd/
+      const total = regularVerbsData.length;
+      const chip = (g) => {
+        const active = activeRegularGroup === g ? ' active' : '';
+        const n = g === 'all' ? total : regularVerbsData.filter(v => v.ed_group === g).length;
+        const m = RV_GROUP_META[g];
+        return `<div class="cat-chip${active}" onclick="filterRegularGroup('${g}')" role="button" tabindex="0">
+                  <span>${m.icon} ${m.title}</span><span class="cat-chip-count">${n}</span>
+                </div>`;
+      };
+      document.getElementById('verb-types').innerHTML =
+        ['all', 't', 'd', 'id'].map(chip).join('');
+
+      const q = (document.getElementById('verb-search').value || '').toLowerCase().trim();
+      let list = regularVerbsData;
+      if (activeRegularGroup !== 'all') list = list.filter(v => v.ed_group === activeRegularGroup);
+      if (q) list = list.filter(v =>
+        v.base.toLowerCase().includes(q) ||
+        v.past.toLowerCase().includes(q) ||
+        (v.meaning_es || '').toLowerCase().includes(q));
+
+      document.getElementById('verb-count').textContent = `${list.length} verbo${list.length === 1 ? '' : 's'}`;
+
+      const ipa = t => t ? `<small class="vf-ipa">/${t}/</small>` : '';
+      const GROUP_LABEL = {
+        t:  'GRUPO /t/ · El -ED suena T (raíz termina en sonido sordo)',
+        d:  'GRUPO /d/ · El -ED suena D (raíz termina en sonido sonoro o vocal)',
+        id: 'GRUPO /ɪd/ · El -ED suena ID (raíz termina en /t/ o /d/)'
+      };
+      let html = '', lastGroup = '';
+      list.forEach(v => {
+        if (v.ed_group !== lastGroup) {
+          html += `<div class="verb-pattern-title">${GROUP_LABEL[v.ed_group] || v.ed_group}</div>`;
+          lastGroup = v.ed_group;
+        }
+        const say = `${v.base}, ${v.past}`.replace(/'/g, "\\'");
+        html += `
+          <div class="verb-row">
+            <div class="verb-forms">
+              <span class="vf base">${v.base}${ipa(v.ipa_base)}</span>
+              <span class="vf">${v.past}${ipa(v.ipa_past)}</span>
+              <span class="vf regv-group regv-${v.ed_group}">/${v.ed_group === 'id' ? 'ɪd' : v.ed_group}/</span>
+            </div>
+            <div class="verb-tr">${v.meaning_es}</div>
             <button class="verb-audio" onclick="speakEnglish('${say}', this)" title="Escuchar">
               <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M15.54 8.46a5 5 0 0 1 0 7.07"/></svg>
             </button>
