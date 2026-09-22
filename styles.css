@@ -739,6 +739,42 @@
     .vf.regv-t  { background: rgba(56, 189, 248, 0.18);  color: #7dd3fc; border: 1px solid rgba(56, 189, 248, 0.35); }
     .vf.regv-d  { background: rgba(16, 185, 129, 0.18);  color: #6ee7b7; border: 1px solid rgba(16, 185, 129, 0.35); }
     .vf.regv-id { background: rgba(234, 179, 8, 0.18);   color: #fde68a; border: 1px solid rgba(234, 179, 8, 0.35); }
+
+    /* Quiz de verbos regulares (R3) */
+    .rv-word-row { display: flex; justify-content: center; align-items: center; gap: 0.6rem; }
+    .rv-word { font-size: 2rem; font-weight: 800; color: #c084fc; letter-spacing: 0.5px; }
+    .rv-meaning { text-align: center; color: var(--text-muted, #9aa0b8); margin: 0.2rem 0 0.4rem; }
+    .rv-ipa { font-family: 'Cambria', Georgia, serif; color: #22d3ee; font-size: 0.9rem; }
+    .rv-step-title {
+      font-size: 0.75rem; letter-spacing: 1px; text-transform: uppercase;
+      color: var(--text-muted, #9aa0b8); text-align: center; margin: 1.1rem 0 0.6rem;
+    }
+    .rv-opts { display: grid; grid-template-columns: repeat(3, 1fr); gap: 0.55rem; }
+    .rv-opt {
+      justify-content: center; text-align: center;
+      font-family: 'Cambria', Georgia, serif; font-size: 1.2rem; font-weight: 700;
+    }
+    .rv-step2 { text-align: center; }
+    .rv-say-row { display: inline-flex; align-items: center; justify-content: center; gap: 0.5rem; flex-wrap: wrap; }
+    .rv-missed-t {
+      font-size: 0.78rem; color: var(--text-muted, #9aa0b8); text-transform: uppercase;
+      letter-spacing: 0.5px; text-align: center; margin: 0.4rem 0 0.5rem;
+    }
+    .rv-missed-list { display: flex; flex-wrap: wrap; gap: 0.4rem; justify-content: center; margin-bottom: 1rem; }
+    .rv-missed {
+      background: rgba(239, 68, 68, 0.08); border: 1px solid rgba(239, 68, 68, 0.25);
+      border-radius: 999px; padding: 0.25rem 0.7rem; font-size: 0.85rem;
+    }
+    .rv-missed small { color: var(--text-muted, #9aa0b8); }
+    .rv-stat-row { display: grid; grid-template-columns: 64px 1fr 120px; align-items: center; gap: 0.6rem; margin: 0.55rem 0; }
+    .rv-stat-bar { height: 8px; background: rgba(148, 163, 184, 0.15); border-radius: 999px; overflow: hidden; }
+    .rv-stat-fill { height: 100%; transition: width 0.4s ease; }
+    .rv-stat-fill.regv-t  { background: #38bdf8; }
+    .rv-stat-fill.regv-d  { background: #10b981; }
+    .rv-stat-fill.regv-id { background: #eab308; }
+    .rv-stat-num { font-weight: 700; font-size: 0.9rem; }
+    .rv-stat-num small { color: var(--text-muted, #9aa0b8); font-weight: 400; font-size: 0.72rem; margin-left: 0.25rem; }
+    .rv-stat-mic { text-align: center; color: var(--text-muted, #9aa0b8); font-size: 0.85rem; margin-top: 0.8rem; }
     .verb-pattern-title {
       font-size: 0.72rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase;
       color: #a855f7; margin: 1.4rem 0 0.7rem; line-height: 1.4;

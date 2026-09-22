@@ -298,6 +298,10 @@
 
   <!-- ── VIEW: Irregular verbs ── -->
   <div class="study-view hidden" id="view-verbs">
+    <div class="lab-sub-bar" id="verb-class-bar">
+      <button class="lab-sub-btn active" onclick="setVerbClass('irregular')">◆ Irregulares</button>
+      <button class="lab-sub-btn" onclick="setVerbClass('regular')">🔄 Regulares</button>
+    </div>
     <div class="linker-modes">
       <button class="mode-btn active" id="vmode-study" onclick="setVerbMode('study')">📖 Estudiar</button>
       <button class="mode-btn" id="vmode-quiz" onclick="setVerbMode('quiz')">🎯 Practicar</button>
@@ -306,10 +310,6 @@
 
     <!-- Modo estudiar -->
     <div id="verb-study">
-      <div class="lab-sub-bar" id="verb-class-bar">
-        <button class="lab-sub-btn active" onclick="setVerbClass('irregular')">◆ Irregulares</button>
-        <button class="lab-sub-btn" onclick="setVerbClass('regular')">🔄 Regulares</button>
-      </div>
       <input class="verb-search" id="verb-search" placeholder="🔎 Buscar verbo (en inglés o español)..." oninput="onVerbSearchInput()" />
       <div class="study-cats" id="verb-types"></div>
       <div id="verb-concept-chips" class="section-concept-bar"></div>
@@ -338,6 +338,9 @@
       </div>
       <div id="vquiz-result" class="hidden"></div>
     </div>
+
+    <!-- Modo práctica · verbos regulares (quiz R3, se pinta desde app.js) -->
+    <div id="rv-quiz" class="hidden"></div>
 
     <!-- Modo progreso -->
     <div id="verb-stats" class="hidden"></div>

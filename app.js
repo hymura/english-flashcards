@@ -108,6 +108,19 @@
         const outcome = correct ? 'pass' : 'fail';
         await this.recordEvidence(links.map(l => ({ conceptId: l.concept_id, skillId: sk.id, outcome })));
       },
+      // R3 · Dual-write del quiz de verbos regulares → regla pron-c3 (-ED).
+      // skillCode: 'recognize' (eligió el sonido) | 'speak' (lo dijo con mic).
+      async submitFromRegularVerb(verbId, outcome, skillCode) {
+        if (!this.enabled || !currentUser || verbId == null) return;
+        const { data: sk, error: eSk } = await sb.from('lc_skill')
+          .select('id').eq('code', skillCode).single();
+        if (eSk || !sk) { console.warn('LC.submitFromRegularVerb skill:', skillCode, eSk && eSk.message); return; }
+        const { data: links, error: eCc } = await sb.from('lc_content_concept')
+          .select('concept_id').eq('content_type', 'regular_verb').eq('content_id', verbId);
+        if (eCc) { console.warn('LC.submitFromRegularVerb lookup:', eCc.message); return; }
+        if (!links || links.length === 0) return;
+        await this.recordEvidence(links.map(l => ({ conceptId: l.concept_id, skillId: sk.id, outcome })));
+      },
       // G4 · Dual-write para las cards del drill de Patrones.
       // skill='produce', content_type='pattern_card', content_id=card_id.
       // Los 98 puentes están enganchados en lc_content_concept por G4.
@@ -3480,6 +3493,7 @@ U15: 55=Añadir · 56=Contrastar · 57=Causa/efecto · 58=Tiempo · 59=Ilustrar 
       if (name !== 'chat')     stopChatMic();
       if (name !== 'dict')     stopDictMic();
       if (name !== 'patterns') stopPatternMic();
+      if (name !== 'verbs')    stopRvMic();
       if (name === 'grammar')  loadGrammar();
       if (name === 'verbs')    loadVerbs();
       if (name === 'linkers')  loadLinkers();
@@ -4003,6 +4017,7 @@ U15: 55=Añadir · 56=Contrastar · 57=Causa/efecto · 58=Tiempo · 59=Ilustrar 
     let verbsData = null;
     // ── Verbos regulares (nueva sub-vista R1+R2) ───────────────────
     let verbClass = 'irregular';        // 'irregular' | 'regular'
+    let verbMode  = 'study';            // 'study' | 'quiz' | 'stats' (modo activo de la vista Verbos)
     let regularVerbsData = null;         // caché fetch
     let activeRegularGroup = 'all';      // 'all' | 't' | 'd' | 'id'
     const RV_GROUP_META = {
@@ -4156,6 +4171,9 @@ U15: 55=Añadir · 56=Contrastar · 57=Causa/efecto · 58=Tiempo · 59=Ilustrar 
         buildVerbTypePills();
         renderVerbs();
       }
+      // La barra de clase está sobre los modos: si estás en Practicar o
+      // Progreso, rehace ese modo con la clase nueva.
+      if (verbMode !== 'study') setVerbMode(verbMode);
     }
 
     function onVerbSearchInput() {
@@ -4237,6 +4255,321 @@ U15: 55=Añadir · 56=Contrastar · 57=Causa/efecto · 58=Tiempo · 59=Ilustrar 
     }
 
     // ╔══════════════════════════════════════════════════════════╗
+    // ║  QUIZ VERBOS REGULARES · R3                              ║
+    // ║  Paso 1: elegir el sonido del -ED (/t/, /d/, /ɪd/).      ║
+    // ║  Paso 2: decir el pasado en voz alta. El STT verifica la ║
+    // ║  PALABRA, no el fonema: el -ED se compara de oído contra ║
+    // ║  el modelo 🔊. Guarda en regular_verb_progress y hace    ║
+    // ║  dual-write a pron-c3 (recognize / speak).               ║
+    // ╚══════════════════════════════════════════════════════════╝
+    const RV_QUIZ_SIZE = { d: 4, t: 3, id: 3 };   // 10 verbos, mezcla de los 3 sonidos
+    const RV_SOUND_LABEL = { t: '/t/', d: '/d/', id: '/ɪd/' };
+    let rvQuiz = null;   // { items, idx, soundScore, answered, micDone, micScores, missed }
+    let rvMicRecorder = null, rvMicChunks = [], rvMicRecog = null, rvMicListening = false;
+
+    // Último sonido de la raíz a partir de su IPA (con dígrafos y diptongos).
+    function rvLastSound(ipa) {
+      const s = (ipa || '').replace(/[ˈˌ]/g, '');
+      const m = s.match(/(tʃ|dʒ|eɪ|aɪ|ɔɪ|aʊ|oʊ|.ː)$/);
+      return m ? m[1] : s.slice(-1);
+    }
+
+    function rvWhy(v) {
+      const ls = rvLastSound(v.ipa_base);
+      if (v.ed_group === 'id') return `<b>${v.base}</b> termina en /${ls}/ → el -ED se pronuncia <b>/ɪd/</b>: suma una sílaba.`;
+      if (v.ed_group === 't')  return `<b>${v.base}</b> termina en /${ls}/, un sonido sordo (la garganta no vibra) → el -ED suena <b>/t/</b>.`;
+      const vowel = /[aeiouæɑɒɔəɛɜɪʊʌː]$/.test(ls);
+      return `<b>${v.base}</b> termina en /${ls}/, ${vowel ? 'un sonido vocálico' : 'un sonido sonoro (la garganta vibra)'} → el -ED suena <b>/d/</b>.`;
+    }
+
+    function buildRvQuizItems() {
+      const pick = (g, n) => shuffle(regularVerbsData.filter(v => v.ed_group === g)).slice(0, n);
+      return shuffle([...pick('d', RV_QUIZ_SIZE.d), ...pick('t', RV_QUIZ_SIZE.t), ...pick('id', RV_QUIZ_SIZE.id)]);
+    }
+
+    async function startRegularVerbQuiz() {
+      const box = document.getElementById('rv-quiz');
+      if (!regularVerbsData) {
+        box.innerHTML = '<div class="no-data">Cargando verbos regulares...</div>';
+        await loadRegularVerbs();
+      }
+      if (!regularVerbsData || !regularVerbsData.length) {
+        box.innerHTML = '<div class="no-data">No pude cargar los verbos regulares.</div>';
+        return;
+      }
+      rvQuiz = { items: buildRvQuizItems(), idx: 0, soundScore: 0, answered: false, micDone: false, micScores: [], missed: [] };
+      renderRvQuestion();
+    }
+
+    function renderRvQuestion() {
+      stopRvMic();
+      const q = rvQuiz, v = q.items[q.idx], total = q.items.length;
+      const esc = t => (t || '').replace(/'/g, "\\'");
+      q.answered = false;
+      q.micDone = false;
+      document.getElementById('rv-quiz').innerHTML = `
+        <div class="pattern-drill-top">
+          <button class="lab-back" onclick="exitRvQuiz()">← Salir</button>
+          <div class="pattern-drill-progress">Verbo ${q.idx + 1} de ${total} · <b id="rv-score">${q.soundScore}</b> aciertos</div>
+        </div>
+        <div class="pattern-quiz-bar"><div class="pattern-quiz-bar-fill" style="width:${Math.round(q.idx / total * 100)}%"></div></div>
+        <div class="pattern-drill-card">
+          <div class="rv-word-row">
+            <span class="rv-word">${v.base}</span>
+            <button class="pattern-full-play" onclick="speakEnglish('${esc(v.base)}', this)" title="Escuchar">🔊</button>
+          </div>
+          <div class="rv-meaning">${v.meaning_es} · <span class="rv-ipa">/${v.ipa_base}/</span></div>
+          <div class="rv-step-title">Paso 1 · ¿Cómo suena el -ED de su pasado?</div>
+          <div class="rv-opts">
+            ${['t', 'd', 'id'].map(g => `<button class="quiz-opt rv-opt" id="rvopt-${g}" onclick="answerRvSound('${g}')">${RV_SOUND_LABEL[g]}</button>`).join('')}
+          </div>
+          <div class="quiz-feedback hidden" id="rv-why"></div>
+          <div class="rv-step2 hidden" id="rv-step2">
+            <div class="rv-step-title">Paso 2 · Dilo en voz alta</div>
+            <div class="rv-say-row">
+              <span class="pattern-full-en">${v.past}</span>
+              <span class="rv-ipa">/${v.ipa_past}/</span>
+              <button class="pattern-full-play" onclick="speakEnglish('${esc(v.past)}', this)" title="Escuchar el modelo">🔊</button>
+              <button class="pattern-mic-btn" id="rv-mic-btn" onclick="toggleRvMic()" title="Dilo en voz alta">🎤</button>
+            </div>
+            <div class="pattern-mic-fb hidden" id="rv-mic-fb"></div>
+            <div class="pattern-drill-hint">El 🎤 verifica que digas la palabra; el sonido del -ED compáralo de oído con el modelo 🔊.</div>
+          </div>
+          <button class="pattern-next hidden" id="rv-next" onclick="nextRvQuestion()">${q.idx === total - 1 ? 'Ver resultado 🏁' : 'Siguiente →'}</button>
+        </div>`;
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+
+    function answerRvSound(g) {
+      if (!rvQuiz || rvQuiz.answered) return;
+      rvQuiz.answered = true;
+      const v = rvQuiz.items[rvQuiz.idx];
+      const ok = g === v.ed_group;
+      if (ok) rvQuiz.soundScore += 1;
+      else rvQuiz.missed.push(v);
+      ['t', 'd', 'id'].forEach(x => {
+        const b = document.getElementById('rvopt-' + x);
+        if (x === v.ed_group) b.classList.add('ok');
+        else if (x === g)     b.classList.add('bad');
+        b.disabled = true;
+      });
+      const fb = document.getElementById('rv-why');
+      fb.className = 'quiz-feedback ' + (ok ? 'good' : 'bad');
+      fb.innerHTML = `<div class="qfb-title">${ok ? '✅ ¡Correcto!' : '❌ Suena ' + RV_SOUND_LABEL[v.ed_group]}</div>
+        <div class="qfb-es">${rvWhy(v)}</div>`;
+      document.getElementById('rv-score').textContent = rvQuiz.soundScore;
+      document.getElementById('rv-step2').classList.remove('hidden');
+      document.getElementById('rv-next').classList.remove('hidden');
+      saveRvAttempt(v.id, 'sound', ok ? 'pass' : 'fail', null, g);
+      speakEnglish(v.past);   // modelo del pasado justo después de responder
+    }
+
+    // Legacy autoritativo (regular_verb_progress) + dual-write best-effort al Core.
+    function saveRvAttempt(verbId, mode, outcome, score, answer) {
+      if (!currentUser || !currentUser.id) return;
+      sb.from('regular_verb_progress').insert({ verb_id: verbId, mode, outcome, score, answer })
+        .then(({ error }) => { if (error) console.warn('regular_verb_progress insert:', error.message); });
+      if (LC.enabled) {
+        LC.submitFromRegularVerb(verbId, outcome, mode === 'mic' ? 'speak' : 'recognize')
+          .then(() => lcRefreshAndNotify())
+          .catch(e => console.warn('LC dual-write (verbos regulares):', e));
+      }
+    }
+
+    function toggleRvMic() {
+      rvMicListening ? stopRvMic() : startRvMic();
+    }
+
+    async function startRvMic() {
+      if (!rvQuiz) return;
+      const v = rvQuiz.items[rvQuiz.idx];
+      const btn = document.getElementById('rv-mic-btn');
+      const fb  = document.getElementById('rv-mic-fb');
+      if (!btn || !fb) return;
+      fb.classList.remove('hidden');
+      if (useCloudSTT()) {
+        let stream;
+        try { stream = await navigator.mediaDevices.getUserMedia({ audio: true }); }
+        catch (e) { fb.innerHTML = 'No pude acceder al micrófono. Revisa los permisos.'; return; }
+        rvMicChunks = [];
+        let opts = {};
+        if (window.MediaRecorder && MediaRecorder.isTypeSupported) {
+          if (MediaRecorder.isTypeSupported('audio/webm'))     opts = { mimeType: 'audio/webm' };
+          else if (MediaRecorder.isTypeSupported('audio/mp4')) opts = { mimeType: 'audio/mp4' };
+        }
+        try { rvMicRecorder = new MediaRecorder(stream, opts); }
+        catch (e) { rvMicRecorder = new MediaRecorder(stream); }
+        rvMicRecorder.ondataavailable = e => { if (e.data && e.data.size > 0) rvMicChunks.push(e.data); };
+        rvMicRecorder.onstop = async () => {
+          stream.getTracks().forEach(t => t.stop());
+          const type = (rvMicChunks[0] && rvMicChunks[0].type) || 'audio/webm';
+          const blob = new Blob(rvMicChunks, { type });
+          rvMicChunks = [];
+          if (blob.size < 1200) { fb.innerHTML = 'No te escuché. Intenta de nuevo 🎤'; return; }
+          fb.innerHTML = '⏳ Comparando...';
+          try {
+            const form = new FormData();
+            form.append('file', blob, 'audio.' + (type.includes('mp4') ? 'mp4' : 'webm'));
+            form.append('language', 'en');
+            const { data, error } = await sb.functions.invoke('transcribe', { body: form });
+            if (error) throw new Error(error.message);
+            gradeRvMic(v, (data && data.text ? data.text : '').trim());
+          } catch (e) { fb.innerHTML = 'Error: ' + (e.message || e); }
+        };
+        rvMicRecorder.start();
+        rvMicListening = true;
+        btn.classList.add('listening');
+        fb.innerHTML = '🔴 Grabando... oprime otra vez al terminar';
+      } else {
+        const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+        if (!SR) { fb.innerHTML = 'Tu navegador no soporta reconocimiento de voz.'; return; }
+        rvMicRecog = new SR();
+        rvMicRecog.lang = 'en-US'; rvMicRecog.interimResults = false; rvMicRecog.maxAlternatives = 3;
+        rvMicRecog.onstart = () => { rvMicListening = true; btn.classList.add('listening'); fb.innerHTML = '🔴 Escuchando... di el pasado'; };
+        rvMicRecog.onresult = e => {
+          let best = e.results[0][0].transcript, bs = scorePronunciation(v.past, best);
+          for (let k = 1; k < e.results[0].length; k++) {
+            const alt = e.results[0][k].transcript, s = scorePronunciation(v.past, alt);
+            if (s.pct > bs.pct) { bs = s; best = alt; }
+          }
+          gradeRvMic(v, best);
+        };
+        rvMicRecog.onerror = e => { if (e.error === 'no-speech') fb.innerHTML = 'No te escuché 🎤'; stopRvMic(); };
+        rvMicRecog.onend   = () => stopRvMic();
+        rvMicRecog.start();
+      }
+    }
+
+    function stopRvMic() {
+      rvMicListening = false;
+      const btn = document.getElementById('rv-mic-btn');
+      if (btn) btn.classList.remove('listening');
+      if (rvMicRecog) { try { rvMicRecog.stop(); } catch (e) {} rvMicRecog = null; }
+      if (rvMicRecorder && rvMicRecorder.state !== 'inactive') { try { rvMicRecorder.stop(); } catch (e) {} }
+    }
+
+    function gradeRvMic(v, said) {
+      stopRvMic();
+      // Si la transcripción llega cuando ya pasaste a otro verbo, se descarta.
+      if (!rvQuiz || rvQuiz.items[rvQuiz.idx] !== v) return;
+      const fb = document.getElementById('rv-mic-fb');
+      if (!fb) return;
+      fb.classList.remove('hidden');
+      if (!said) { fb.innerHTML = 'No entendí. Intenta de nuevo 🎤'; return; }
+      const score = scorePronunciation(v.past, said);
+      const cls = score.pct >= 80 ? 'score-great' : score.pct >= 50 ? 'score-good' : 'score-try';
+      fb.innerHTML = `
+        <div style="display:flex; justify-content:space-between; align-items:center">
+          <b>${score.pct >= 80 ? '🏆 ¡Bien dicho!' : '🔄 Intenta otra vez'}</b>
+          <span class="score-badge ${cls}">${score.pct}%</span>
+        </div>
+        <div style="color:var(--text-muted); font-size:0.78rem; margin-top:0.3rem">Dijiste: “${escapeHtml(said)}”</div>`;
+      if (!rvQuiz.micDone) {   // cuenta el 1er intento de cada verbo
+        rvQuiz.micDone = true;
+        rvQuiz.micScores.push(score.pct);
+        const outcome = score.pct >= 80 ? 'pass' : (score.pct >= 50 ? 'partial' : 'fail');
+        saveRvAttempt(v.id, 'mic', outcome, +(score.pct / 100).toFixed(2), said);
+      }
+    }
+
+    function nextRvQuestion() {
+      if (!rvQuiz) return;
+      stopRvMic();
+      if (rvQuiz.idx < rvQuiz.items.length - 1) {
+        rvQuiz.idx += 1;
+        renderRvQuestion();
+      } else {
+        renderRvResult();
+      }
+    }
+
+    function renderRvResult() {
+      const q = rvQuiz, total = q.items.length;
+      const pct = Math.round(q.soundScore / total * 100);
+      const micAvg = q.micScores.length ? Math.round(q.micScores.reduce((a, b) => a + b, 0) / q.micScores.length) : null;
+      const missed = q.missed.map(v =>
+        `<span class="rv-missed">${v.base} → ${v.past} <b>${RV_SOUND_LABEL[v.ed_group]}</b></span>`).join('');
+      document.getElementById('rv-quiz').innerHTML = `
+        <div class="pattern-result">
+          <div class="pattern-result-emoji">${pct >= 80 ? '🏆' : pct >= 50 ? '💪' : '🔄'}</div>
+          <div class="pattern-result-msg">${q.soundScore} de ${total} sonidos correctos</div>
+          <div class="pattern-result-detail">${micAvg == null
+            ? 'No usaste el micrófono en esta ronda. ¡La próxima dilos en voz alta! 🎤'
+            : `🎤 Dijiste ${q.micScores.length} de ${total} en voz alta · promedio ${micAvg}%`}</div>
+          ${missed
+            ? `<div class="rv-missed-t">Para repasar</div><div class="rv-missed-list">${missed}</div>`
+            : '<div class="pron-quiz-clean">¡Sin fallos en los sonidos! 🎉</div>'}
+          <div class="pattern-result-actions">
+            <button class="pattern-next" onclick="startRegularVerbQuiz()">🔁 Otra ronda</button>
+            <button class="lab-back" style="margin:0" onclick="setVerbMode('study')">← Volver a estudiar</button>
+          </div>
+        </div>`;
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+      rvQuiz = null;
+    }
+
+    function exitRvQuiz() {
+      stopRvMic();
+      rvQuiz = null;
+      setVerbMode('study');
+    }
+
+    // ── Progreso de verbos regulares (modo 📊 con la clase Regulares) ──
+    async function renderRegularVerbStats() {
+      const box = document.getElementById('verb-stats');
+      if (!currentUser) {
+        box.innerHTML = '<div class="no-data">🔐 Inicia sesión para ver tu progreso con los verbos regulares.</div>';
+        return;
+      }
+      box.innerHTML = '<div class="no-data">Cargando tu progreso...</div>';
+      if (!regularVerbsData) await loadRegularVerbs();
+      const { data, error } = await sb.from('regular_verb_progress').select('verb_id, mode, outcome, score');
+      if (error) {
+        box.innerHTML = `<div class="no-data">No pude cargar tu progreso.<br><span style="font-size:0.75rem">${error.message}</span></div>`;
+        return;
+      }
+      if (!data || !data.length) {
+        box.innerHTML = '<div class="no-data">Aún no has practicado verbos regulares. Dale a 🎯 Practicar.</div>';
+        return;
+      }
+      const byId = new Map((regularVerbsData || []).map(v => [v.id, v]));
+      const grp = { t: { ok: 0, n: 0 }, d: { ok: 0, n: 0 }, id: { ok: 0, n: 0 } };
+      const fails = new Map();
+      let micN = 0, micSum = 0;
+      data.forEach(r => {
+        const v = byId.get(r.verb_id);
+        if (!v) return;
+        if (r.mode === 'sound') {
+          grp[v.ed_group].n++;
+          if (r.outcome === 'pass') grp[v.ed_group].ok++;
+          else fails.set(v.id, (fails.get(v.id) || 0) + 1);
+        } else if (r.score != null) {
+          micN++;
+          micSum += Number(r.score);
+        }
+      });
+      const rows = ['t', 'd', 'id'].map(k => {
+        const x = grp[k], p = x.n ? Math.round(x.ok / x.n * 100) : null;
+        return `<div class="rv-stat-row">
+          <span class="vf regv-group regv-${k}">${RV_SOUND_LABEL[k]}</span>
+          <div class="rv-stat-bar"><div class="rv-stat-fill regv-${k}" style="width:${p || 0}%"></div></div>
+          <span class="rv-stat-num">${p == null ? '—' : p + '%'} <small>${x.n} intentos</small></span>
+        </div>`;
+      }).join('');
+      const weak = [...fails.entries()].sort((a, b) => b[1] - a[1]).slice(0, 8)
+        .map(([id, n]) => { const v = byId.get(id); return `<span class="rv-missed">${v.base} → ${v.past} <b>${RV_SOUND_LABEL[v.ed_group]}</b> <small>×${n}</small></span>`; })
+        .join('');
+      box.innerHTML = `
+        <div class="pron-prog-summary">
+          <div class="rv-step-title" style="margin-top:0">Aciertos al reconocer el sonido del -ED</div>
+          ${rows}
+          <div class="rv-stat-mic">🎤 ${micN ? `${micN} verbos dichos en voz alta · promedio ${Math.round(micSum / micN * 100)}%` : 'Aún no has usado el micrófono aquí'}</div>
+        </div>
+        ${weak ? `<div class="rv-missed-t">Los que más fallas</div><div class="rv-missed-list">${weak}</div>` : ''}
+        <div style="text-align:center; color:var(--text-muted); font-size:0.75rem; margin-top:0.75rem">También suma a la regla C3 en Sonidos → Mi progreso.</div>`;
+    }
+
+    // ╔══════════════════════════════════════════════════════════╗
     // ║  PRÁCTICA de verbos irregulares                          ║
     // ╚══════════════════════════════════════════════════════════╝
     const VQUIZ_SIZE = 10;
@@ -4244,13 +4577,17 @@ U15: 55=Añadir · 56=Contrastar · 57=Causa/efecto · 58=Tiempo · 59=Ilustrar 
     let verbProgress = new Map();   // verb_id -> { attempts, correct, last_result }
 
     function setVerbMode(mode) {
+      verbMode = mode;
+      stopRvMic();
+      const regular = verbClass === 'regular';
       ['study', 'quiz', 'stats'].forEach(m =>
         document.getElementById('vmode-' + m).classList.toggle('active', m === mode));
       document.getElementById('verb-study').classList.toggle('hidden', mode !== 'study');
-      document.getElementById('verb-quiz').classList.toggle('hidden',  mode !== 'quiz');
+      document.getElementById('verb-quiz').classList.toggle('hidden',  mode !== 'quiz' || regular);
+      document.getElementById('rv-quiz').classList.toggle('hidden',    mode !== 'quiz' || !regular);
       document.getElementById('verb-stats').classList.toggle('hidden', mode !== 'stats');
-      if (mode === 'quiz')  startVerbQuiz();
-      if (mode === 'stats') renderVerbStats();
+      if (mode === 'quiz')  regular ? startRegularVerbQuiz() : startVerbQuiz();
+      if (mode === 'stats') regular ? renderRegularVerbStats() : renderVerbStats();
     }
 
     // ── Progreso ──────────────────────────────────────────────────
