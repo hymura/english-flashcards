@@ -779,8 +779,10 @@
     /* Escribir y decir (Patrones) */
     .wr-card .pattern-card-foot { flex-direction: column; align-items: stretch; gap: 0.35rem; }
     .wr-card-prog { font-size: 0.78rem; color: #c084fc; font-weight: 600; }
-    .wr-card-bar { height: 5px; background: rgba(148, 163, 184, 0.15); border-radius: 999px; overflow: hidden; }
+    .wr-card-near { color: #eab308; font-weight: 600; }
+    .wr-card-bar { display: flex; height: 5px; background: rgba(148, 163, 184, 0.15); border-radius: 999px; overflow: hidden; }
     .wr-card-fill { height: 100%; background: linear-gradient(90deg, #a855f7, #10b981); }
+    .wr-card-fill-near { height: 100%; background: rgba(234, 179, 8, 0.75); }
     .wr-prompt {
       text-align: center; font-size: 1.35rem; font-weight: 700; line-height: 1.35;
       margin: 0.6rem 0 1.1rem; color: var(--text, #e5e7eb);

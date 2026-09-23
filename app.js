@@ -2169,9 +2169,13 @@
       const cards = writeData.map((s, i) => {
         const n = s.phrases.length;
         const done = s.phrases.filter(p => writeBest.get(p.id) === 'pass').length;
+        const near = s.phrases.filter(p => writeBest.get(p.id) === 'partial').length;
         const prog = currentUser
-          ? `<span class="wr-card-prog">✍️ ${done}/${n}</span>
-             <div class="wr-card-bar"><div class="wr-card-fill" style="width:${Math.round(done / n * 100)}%"></div></div>`
+          ? `<span class="wr-card-prog">✍️ ${done}/${n}${near ? ` <span class="wr-card-near">· ${near} casi</span>` : ''}</span>
+             <div class="wr-card-bar">
+               <div class="wr-card-fill" style="width:${Math.round(done / n * 100)}%"></div>
+               <div class="wr-card-fill-near" style="width:${Math.round(near / n * 100)}%"></div>
+             </div>`
           : `<span class="wr-card-prog">${n} frases</span>`;
         return `<button class="pattern-card wr-card" onclick="startWriteSession(${i})">
           <div class="pattern-card-en">${escapeHtml(s.en)}</div>
