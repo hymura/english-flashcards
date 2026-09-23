@@ -1668,6 +1668,7 @@
         `<button class="lab-sub-btn ${active === id ? 'active' : ''}" onclick="setPatternsSubView('${id}')">${label}</button>`;
       return `<div class="lab-sub-bar">
         ${btn('index', '◆ Practicar')}
+        ${btn('write', '✍️ Escribir y decir')}
         ${btn('progress', '📊 Mi progreso')}
       </div>`;
     }
@@ -1675,7 +1676,10 @@
     function setPatternsSubView(sub) {
       patternsSubView = sub;
       stopPatternMic();
+      stopWriteMic();
+      writeSession = null;
       if (sub === 'progress') loadPatternsProgress();
+      else if (sub === 'write') loadWriteStructures();
       else renderPatternsIndex();
     }
 
@@ -2104,6 +2108,399 @@
       stopPatternMic();
       currentPatternDrill = null;
       renderPatternsIndex();
+    }
+
+    // ╔══════════════════════════════════════════════════════════╗
+    // ║  ESCRIBIR Y DECIR · Patrones                             ║
+    // ║  Frases de la categoría 'Estructuras' agrupadas por su   ║
+    // ║  estructura (I want, How come…). Por frase: ves el       ║
+    // ║  español → escribes el inglés (validación tolerante) →   ║
+    // ║  lo dices con 🎤. Guarda en phrase_write_progress, SRS,  ║
+    // ║  racha y dual-write al Core (write / produce).           ║
+    // ╚══════════════════════════════════════════════════════════╝
+    let writeData = null;      // [{ name, en, es, phrases: [{id, phrase, translation, pron}] }]
+    let writeBest = new Map(); // phrase_id → mejor resultado escrito ('pass' | 'partial' | 'fail')
+    let writeSession = null;   // { sIdx, items, idx, checked, hint, results, micScores, micDone }
+    let wMicRecorder = null, wMicChunks = [], wMicRecog = null, wMicListening = false;
+    const WRITE_RANK = { fail: 0, partial: 1, pass: 2 };
+
+    async function loadWriteStructures() {
+      patternsSubView = 'write';
+      const box = document.getElementById('patterns-content');
+      box.innerHTML = patternsSubBarHtml('write') + '<div class="no-data">Cargando estructuras...</div>';
+      try {
+        if (!writeData) {
+          const { data, error } = await sb.from('phrases')
+            .select('phrase_id, phrase_name, phrase_translation, description')
+            .eq('category', 'Estructuras').order('phrase_id');
+          if (error) throw error;
+          const groups = new Map();
+          (data || []).forEach(r => {
+            // description = 'Pronunciación: … · Estructura: I want (quiero)'
+            const m = (r.description || '').match(/^Pronunciación:\s*(.*?)\s*·\s*Estructura:\s*(.+)$/);
+            const name = m ? m[2].trim() : 'Otras';
+            if (!groups.has(name)) {
+              const p = name.match(/^(.*?)\s*\((.*)\)\s*$/);
+              groups.set(name, { name, en: p ? p[1] : name, es: p ? p[2] : '', phrases: [] });
+            }
+            groups.get(name).phrases.push({ id: r.phrase_id, phrase: r.phrase_name, translation: r.phrase_translation, pron: m ? m[1] : '' });
+          });
+          writeData = [...groups.values()];
+        }
+        if (currentUser) {
+          const { data: prog, error: eP } = await sb.from('phrase_write_progress')
+            .select('phrase_id, outcome').eq('mode', 'write');
+          if (eP) console.warn('phrase_write_progress:', eP.message);
+          writeBest = new Map();
+          (prog || []).forEach(r => {
+            const prev = writeBest.get(r.phrase_id);
+            if (!prev || WRITE_RANK[r.outcome] > WRITE_RANK[prev]) writeBest.set(r.phrase_id, r.outcome);
+          });
+        }
+        renderWriteIndex();
+      } catch (err) {
+        box.innerHTML = patternsSubBarHtml('write')
+          + `<div class="no-data">No pude cargar las frases.<br><span style="font-size:0.75rem">${(err && err.message) || err}</span></div>`;
+      }
+    }
+
+    function renderWriteIndex() {
+      writeSession = null;
+      const cards = writeData.map((s, i) => {
+        const n = s.phrases.length;
+        const done = s.phrases.filter(p => writeBest.get(p.id) === 'pass').length;
+        const prog = currentUser
+          ? `<span class="wr-card-prog">✍️ ${done}/${n}</span>
+             <div class="wr-card-bar"><div class="wr-card-fill" style="width:${Math.round(done / n * 100)}%"></div></div>`
+          : `<span class="wr-card-prog">${n} frases</span>`;
+        return `<button class="pattern-card wr-card" onclick="startWriteSession(${i})">
+          <div class="pattern-card-en">${escapeHtml(s.en)}</div>
+          <div class="pattern-card-es">${escapeHtml(s.es)}</div>
+          <div class="pattern-card-foot">${prog}</div>
+        </button>`;
+      }).join('');
+      document.getElementById('patterns-content').innerHTML = `
+        ${patternsSubBarHtml('write')}
+        <p class="today-sub" style="text-align:center; margin-bottom:1rem">
+          Elige una estructura: ves la frase en español, la escribes en inglés y la dices en voz alta ✍️🎤
+        </p>
+        <div class="pattern-grid">${cards}</div>`;
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+
+    function startWriteSession(sIdx) {
+      const s = writeData[sIdx];
+      writeSession = { sIdx, items: s.phrases.slice(), idx: 0, checked: false, hint: false, results: [], micScores: [], micDone: false };
+      renderWriteQuestion();
+    }
+
+    // ── Comparación tolerante ──────────────────────────────────────
+    // Una palabra puede expandirse a varios tokens (I'm → i am); cada token
+    // recuerda a qué palabra original pertenece para pintar la palabra entera.
+    // Contracciones escritas sin apóstrofo (típico en el celular): im → i am.
+    const WRITE_NOAPOS = {
+      im: 'i am', dont: 'do not', doesnt: 'does not', didnt: 'did not', isnt: 'is not', arent: 'are not',
+      wasnt: 'was not', werent: 'were not', havent: 'have not', hasnt: 'has not', wouldnt: 'would not',
+      shouldnt: 'should not', couldnt: 'could not', cant: 'can not', lets: 'let us', thats: 'that is',
+      whats: 'what is', youre: 'you are', theyre: 'they are', ive: 'i have', youve: 'you have',
+      weve: 'we have', theyve: 'they have', youll: 'you will', theyll: 'they will', hes: 'he is', shes: 'she is'
+    };
+
+    function writeExpand(word) {
+      let t = (word || '').toLowerCase().replace(/[’`´]/g, "'").replace(/[^a-z0-9']/g, '');
+      if (!t.includes("'") && WRITE_NOAPOS[t]) return WRITE_NOAPOS[t].split(' ');
+      t = t.replace(/^can't$/, 'can not').replace(/^cannot$/, 'can not').replace(/^won't$/, 'will not')
+           .replace(/^let's$/, 'let us')
+           .replace(/n't$/, ' not').replace(/'re$/, ' are').replace(/'m$/, ' am').replace(/'ve$/, ' have')
+           .replace(/'ll$/, ' will').replace(/'d$/, ' would').replace(/'s$/, ' is');
+      return t.replace(/'/g, '').split(' ').filter(Boolean);
+    }
+
+    function writeLev(a, b) {
+      const d = Array.from({ length: a.length + 1 }, (_, i) => [i]);
+      for (let j = 1; j <= b.length; j++) d[0][j] = j;
+      for (let i = 1; i <= a.length; i++)
+        for (let j = 1; j <= b.length; j++)
+          d[i][j] = Math.min(d[i - 1][j] + 1, d[i][j - 1] + 1, d[i - 1][j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1));
+      return d[a.length][b.length];
+    }
+
+    function writeClose(a, b) {
+      const L = Math.max(a.length, b.length);
+      if (L < 4) return false;
+      return writeLev(a, b) <= (L >= 8 ? 2 : 1);
+    }
+
+    function writeCompare(expected, typed) {
+      const words = expected.split(/\s+/).filter(Boolean);
+      const exp = [];
+      words.forEach((w, wi) => writeExpand(w).forEach(t => exp.push({ t, wi })));
+      const typ = typed.split(/\s+/).flatMap(writeExpand);
+      const n = exp.length, m = typ.length;
+      // DP de alineación: exacto 0 · casi 0.4 · distinto/falta/sobra 1
+      const D = Array.from({ length: n + 1 }, () => new Array(m + 1).fill(0));
+      for (let i = 1; i <= n; i++) D[i][0] = i;
+      for (let j = 1; j <= m; j++) D[0][j] = j;
+      const sub = (i, j) => exp[i].t === typ[j] ? 0 : writeClose(exp[i].t, typ[j]) ? 0.4 : 1;
+      for (let i = 1; i <= n; i++)
+        for (let j = 1; j <= m; j++)
+          D[i][j] = Math.min(D[i - 1][j - 1] + sub(i - 1, j - 1), D[i - 1][j] + 1, D[i][j - 1] + 1);
+      const tokStatus = new Array(n).fill('missing'), tokTyped = new Array(n).fill(''), extras = [];
+      let i = n, j = m;
+      while (i > 0 || j > 0) {
+        if (i > 0 && j > 0 && Math.abs(D[i][j] - (D[i - 1][j - 1] + sub(i - 1, j - 1))) < 1e-9) {
+          const c = sub(i - 1, j - 1);
+          tokStatus[i - 1] = c === 0 ? 'ok' : c < 1 ? 'close' : 'wrong';
+          tokTyped[i - 1] = typ[j - 1];
+          i--; j--;
+        } else if (i > 0 && Math.abs(D[i][j] - (D[i - 1][j] + 1)) < 1e-9) {
+          tokStatus[i - 1] = 'missing'; i--;
+        } else {
+          extras.unshift(typ[j - 1]); j--;
+        }
+      }
+      const RANK = { ok: 0, close: 1, wrong: 2, missing: 2 };
+      const wordStatus = words.map(() => 'ok'), wordTyped = words.map(() => []);
+      exp.forEach((e, k) => {
+        if (RANK[tokStatus[k]] > RANK[wordStatus[e.wi]]) wordStatus[e.wi] = tokStatus[k];
+        if (tokTyped[k]) wordTyped[e.wi].push(tokTyped[k]);
+      });
+      const okTok = tokStatus.filter(s => s === 'ok').length, closeTok = tokStatus.filter(s => s === 'close').length;
+      const bad = tokStatus.some(s => s === 'wrong' || s === 'missing');
+      const outcome = bad ? 'fail' : (closeTok || extras.length) ? 'partial' : 'pass';
+      return { words, wordStatus, wordTyped, extras, outcome, score: n ? (okTok + 0.5 * closeTok) / n : 0 };
+    }
+
+    function renderWriteQuestion() {
+      stopWriteMic();
+      const ws = writeSession, s = writeData[ws.sIdx], p = ws.items[ws.idx], total = ws.items.length;
+      ws.checked = false; ws.hint = false; ws.micDone = false;
+      const passes = ws.results.filter(r => r.outcome === 'pass').length;
+      document.getElementById('patterns-content').innerHTML = `
+        ${patternsSubBarHtml('write')}
+        <div class="pattern-drill-top">
+          <button class="lab-back" onclick="renderWriteIndex()">← Estructuras</button>
+          <div class="pattern-drill-progress">Frase ${ws.idx + 1} de ${total} · <b>${passes}</b> perfectas</div>
+        </div>
+        <div class="pattern-quiz-bar"><div class="pattern-quiz-bar-fill" style="width:${Math.round(ws.idx / total * 100)}%"></div></div>
+        <div class="pattern-drill-card">
+          <div class="pattern-struct-label">${escapeHtml(s.en)} · ${escapeHtml(s.es)}</div>
+          <div class="wr-prompt">${escapeHtml(p.translation)}</div>
+          <input class="wr-input" id="wr-input" type="text" placeholder="Escríbela en inglés…"
+                 autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false"
+                 onkeydown="if (event.key === 'Enter') { event.preventDefault(); checkWrite(); }" />
+          <div class="wr-hint hidden" id="wr-hint"></div>
+          <div class="wr-actions">
+            <button class="lab-back wr-hint-btn" id="wr-hint-btn" onclick="showWriteHint()">💡 Pista</button>
+            <button class="pattern-next" onclick="checkWrite()">Comprobar</button>
+          </div>
+          <div class="wr-result hidden" id="wr-result"></div>
+          <div class="rv-step2 hidden" id="wr-step2">
+            <div class="rv-step-title">Ahora dilo en voz alta</div>
+            <div class="rv-say-row">
+              <button class="pattern-full-play" onclick="speakEnglish(writeSession.items[writeSession.idx].phrase, this)" title="Escuchar el modelo">🔊</button>
+              <button class="pattern-mic-btn" id="wr-mic-btn" onclick="toggleWriteMic()" title="Dilo en voz alta">🎤</button>
+            </div>
+            <div class="pattern-mic-fb hidden" id="wr-mic-fb"></div>
+          </div>
+          <button class="pattern-next hidden" id="wr-next" onclick="nextWrite()">${ws.idx === total - 1 ? 'Ver resultado 🏁' : 'Siguiente →'}</button>
+        </div>`;
+      const inp = document.getElementById('wr-input');
+      if (inp) inp.focus();
+    }
+
+    function showWriteHint() {
+      const ws = writeSession;
+      if (!ws) return;
+      ws.hint = true;
+      const hint = ws.items[ws.idx].phrase.split(/\s+/)
+        .map(w => w.charAt(0) + w.slice(1).replace(/[A-Za-z]/g, '_')).join(' ');
+      const el = document.getElementById('wr-hint');
+      el.textContent = hint;
+      el.classList.remove('hidden');
+      document.getElementById('wr-hint-btn').disabled = true;
+    }
+
+    function checkWrite() {
+      const ws = writeSession;
+      if (!ws) return;
+      const p = ws.items[ws.idx];
+      const typed = (document.getElementById('wr-input').value || '').trim();
+      if (!typed) return;
+      const r = writeCompare(p.phrase, typed);
+      // Con pista, lo máximo es "casi".
+      const outcome = (ws.hint && r.outcome === 'pass') ? 'partial' : r.outcome;
+      const LBL = { ok: 'ok', close: 'close', wrong: 'bad', missing: 'bad' };
+      const chips = r.words.map((w, k) => {
+        const st = r.wordStatus[k], got = r.wordTyped[k].join(' ');
+        const tip = st === 'ok' ? '' : st === 'missing' ? ' title="Te faltó"' : ` title="Escribiste: ${escapeHtml(got)}"`;
+        return `<span class="wr-chip wr-${LBL[st]}"${tip}>${escapeHtml(w)}</span>`;
+      }).join('') + r.extras.map(x => `<span class="wr-chip wr-extra" title="Sobra">${escapeHtml(x)}</span>`).join('');
+      const head = outcome === 'pass' ? '✅ ¡Perfecta!' : outcome === 'partial' ? (ws.hint && r.outcome === 'pass' ? '🟡 Bien (con pista)' : '🟡 Casi: revisa las amarillas') : '❌ Revisa las rojas';
+      const fb = document.getElementById('wr-result');
+      fb.className = 'wr-result quiz-feedback ' + (outcome === 'fail' ? 'bad' : 'good');
+      fb.innerHTML = `
+        <div class="qfb-title">${head}</div>
+        <div class="wr-chips">${chips}</div>
+        <div class="wr-answer">${escapeHtml(p.phrase)}</div>
+        ${p.pron ? `<div class="wr-pron">🗣️ ${escapeHtml(p.pron)}</div>` : ''}`;
+      document.getElementById('wr-step2').classList.remove('hidden');
+      document.getElementById('wr-next').classList.remove('hidden');
+      if (!ws.checked) {   // solo el 1er intento cuenta; después puedes corregir y volver a comprobar
+        ws.checked = true;
+        ws.results.push({ p, outcome });
+        if (WRITE_RANK[outcome] > WRITE_RANK[writeBest.get(p.id) || 'fail'] || !writeBest.has(p.id)) writeBest.set(p.id, outcome);
+        saveWriteAttempt(p.id, 'write', outcome, +r.score.toFixed(2), typed);
+        if (currentUser) {
+          markPhraseStudied(p.id);
+          scheduleSrs('phrase', p.id, outcome === 'fail' ? 'again' : 'good');
+        }
+        speakEnglish(p.phrase);
+      }
+    }
+
+    // Legacy autoritativo (phrase_write_progress) + dual-write best-effort al Core.
+    function saveWriteAttempt(phraseId, mode, outcome, score, answer) {
+      if (!currentUser || !currentUser.id) return;
+      sb.from('phrase_write_progress').insert({ phrase_id: phraseId, mode, outcome, score, answer })
+        .then(({ error }) => { if (error) console.warn('phrase_write_progress insert:', error.message); });
+      if (LC.enabled) {
+        LC.submitFromPhrase(phraseId, outcome, mode === 'mic' ? 'produce' : 'write')
+          .then(() => lcRefreshAndNotify())
+          .catch(e => console.warn('LC dual-write (escribir y decir):', e));
+      }
+    }
+
+    function toggleWriteMic() {
+      wMicListening ? stopWriteMic() : startWriteMic();
+    }
+
+    async function startWriteMic() {
+      if (!writeSession) return;
+      const p = writeSession.items[writeSession.idx];
+      const btn = document.getElementById('wr-mic-btn');
+      const fb  = document.getElementById('wr-mic-fb');
+      if (!btn || !fb) return;
+      fb.classList.remove('hidden');
+      if (useCloudSTT()) {
+        let stream;
+        try { stream = await navigator.mediaDevices.getUserMedia({ audio: true }); }
+        catch (e) { fb.innerHTML = 'No pude acceder al micrófono. Revisa los permisos.'; return; }
+        wMicChunks = [];
+        let opts = {};
+        if (window.MediaRecorder && MediaRecorder.isTypeSupported) {
+          if (MediaRecorder.isTypeSupported('audio/webm'))     opts = { mimeType: 'audio/webm' };
+          else if (MediaRecorder.isTypeSupported('audio/mp4')) opts = { mimeType: 'audio/mp4' };
+        }
+        try { wMicRecorder = new MediaRecorder(stream, opts); }
+        catch (e) { wMicRecorder = new MediaRecorder(stream); }
+        wMicRecorder.ondataavailable = e => { if (e.data && e.data.size > 0) wMicChunks.push(e.data); };
+        wMicRecorder.onstop = async () => {
+          stream.getTracks().forEach(t => t.stop());
+          const type = (wMicChunks[0] && wMicChunks[0].type) || 'audio/webm';
+          const blob = new Blob(wMicChunks, { type });
+          wMicChunks = [];
+          if (blob.size < 1200) { fb.innerHTML = 'No te escuché. Intenta de nuevo 🎤'; return; }
+          fb.innerHTML = '⏳ Comparando...';
+          try {
+            const form = new FormData();
+            form.append('file', blob, 'audio.' + (type.includes('mp4') ? 'mp4' : 'webm'));
+            form.append('language', 'en');
+            const { data, error } = await sb.functions.invoke('transcribe', { body: form });
+            if (error) throw new Error(error.message);
+            gradeWriteMic(p, (data && data.text ? data.text : '').trim());
+          } catch (e) { fb.innerHTML = 'Error: ' + (e.message || e); }
+        };
+        wMicRecorder.start();
+        wMicListening = true;
+        btn.classList.add('listening');
+        fb.innerHTML = '🔴 Grabando... oprime otra vez al terminar';
+      } else {
+        const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+        if (!SR) { fb.innerHTML = 'Tu navegador no soporta reconocimiento de voz.'; return; }
+        wMicRecog = new SR();
+        wMicRecog.lang = 'en-US'; wMicRecog.interimResults = false; wMicRecog.maxAlternatives = 3;
+        wMicRecog.onstart = () => { wMicListening = true; btn.classList.add('listening'); fb.innerHTML = '🔴 Escuchando... di la frase'; };
+        wMicRecog.onresult = e => {
+          let best = e.results[0][0].transcript, bs = scorePronunciation(p.phrase, best);
+          for (let k = 1; k < e.results[0].length; k++) {
+            const alt = e.results[0][k].transcript, s = scorePronunciation(p.phrase, alt);
+            if (s.pct > bs.pct) { bs = s; best = alt; }
+          }
+          gradeWriteMic(p, best);
+        };
+        wMicRecog.onerror = e => { if (e.error === 'no-speech') fb.innerHTML = 'No te escuché 🎤'; stopWriteMic(); };
+        wMicRecog.onend   = () => stopWriteMic();
+        wMicRecog.start();
+      }
+    }
+
+    function stopWriteMic() {
+      wMicListening = false;
+      const btn = document.getElementById('wr-mic-btn');
+      if (btn) btn.classList.remove('listening');
+      if (wMicRecog) { try { wMicRecog.stop(); } catch (e) {} wMicRecog = null; }
+      if (wMicRecorder && wMicRecorder.state !== 'inactive') { try { wMicRecorder.stop(); } catch (e) {} }
+    }
+
+    function gradeWriteMic(p, said) {
+      stopWriteMic();
+      // Transcripción que llega cuando ya pasaste a otra frase: se descarta.
+      if (!writeSession || writeSession.items[writeSession.idx] !== p) return;
+      const fb = document.getElementById('wr-mic-fb');
+      if (!fb) return;
+      fb.classList.remove('hidden');
+      if (!said) { fb.innerHTML = 'No entendí. Intenta de nuevo 🎤'; return; }
+      const score = scorePronunciation(p.phrase, said);
+      const chips = score.wordResult.map(w => `<span class="word-chip ${w.ok ? 'word-ok' : 'word-miss'}">${w.word}</span>`).join('');
+      const cls = score.pct >= 80 ? 'score-great' : score.pct >= 50 ? 'score-good' : 'score-try';
+      fb.innerHTML = `
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:0.4rem">
+          <b>${score.pct >= 80 ? '🏆 ¡Muy bien!' : score.pct >= 50 ? '💪 Sigue puliendo' : '🔄 Repite'}</b>
+          <span class="score-badge ${cls}">${score.pct}%</span>
+        </div>
+        <div class="word-row" style="margin-bottom:0.3rem">${chips}</div>
+        <div style="color:var(--text-muted); font-size:0.78rem">Dijiste: “${escapeHtml(said)}”</div>`;
+      if (!writeSession.micDone) {   // cuenta el 1er intento de cada frase
+        writeSession.micDone = true;
+        writeSession.micScores.push(score.pct);
+        const outcome = score.pct >= 80 ? 'pass' : (score.pct >= 50 ? 'partial' : 'fail');
+        saveWriteAttempt(p.id, 'mic', outcome, +(score.pct / 100).toFixed(2), said);
+      }
+    }
+
+    function nextWrite() {
+      const ws = writeSession;
+      if (!ws) return;
+      stopWriteMic();
+      if (!ws.checked) return;
+      if (ws.idx < ws.items.length - 1) { ws.idx += 1; renderWriteQuestion(); }
+      else renderWriteResult();
+    }
+
+    function renderWriteResult() {
+      const ws = writeSession, s = writeData[ws.sIdx], total = ws.items.length;
+      const cnt = o => ws.results.filter(r => r.outcome === o).length;
+      const micAvg = ws.micScores.length ? Math.round(ws.micScores.reduce((a, b) => a + b, 0) / ws.micScores.length) : null;
+      const review = ws.results.filter(r => r.outcome !== 'pass').map(r =>
+        `<div class="wr-review-row"><span class="wr-review-es">${escapeHtml(r.p.translation)}</span><span class="wr-review-en">${escapeHtml(r.p.phrase)}</span></div>`).join('');
+      document.getElementById('patterns-content').innerHTML = `
+        ${patternsSubBarHtml('write')}
+        <div class="pattern-result">
+          <div class="pattern-result-emoji">${cnt('pass') === total ? '🏆' : cnt('fail') === 0 ? '💪' : '🔄'}</div>
+          <div class="pattern-result-msg">${escapeHtml(s.en)} <span style="color:var(--text-muted); font-weight:400">${escapeHtml(s.es)}</span></div>
+          <div class="pattern-result-detail">✍️ ${cnt('pass')} perfectas · ${cnt('partial')} casi · ${cnt('fail')} a repasar</div>
+          <div class="pattern-result-detail">${micAvg == null
+            ? 'No usaste el micrófono en esta ronda. ¡La próxima dilas en voz alta! 🎤'
+            : `🎤 Dijiste ${ws.micScores.length} de ${total} en voz alta · promedio ${micAvg}%`}</div>
+          ${review ? `<div class="rv-missed-t">Para repasar</div><div class="wr-review">${review}</div>` : ''}
+          <div class="pattern-result-actions">
+            <button class="pattern-next" onclick="startWriteSession(${ws.sIdx})">🔁 Otra vez</button>
+            <button class="lab-back" style="margin:0" onclick="renderWriteIndex()">← Otra estructura</button>
+          </div>
+        </div>`;
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+      writeSession = null;
     }
 
     // ╔══════════════════════════════════════════════════════════╗
@@ -3492,7 +3889,7 @@ U15: 55=Añadir · 56=Contrastar · 57=Causa/efecto · 58=Tiempo · 59=Ilustrar 
       if (name !== 'lab')      stopLabMic();
       if (name !== 'chat')     stopChatMic();
       if (name !== 'dict')     stopDictMic();
-      if (name !== 'patterns') stopPatternMic();
+      if (name !== 'patterns') { stopPatternMic(); stopWriteMic(); }
       if (name !== 'verbs')    stopRvMic();
       if (name === 'grammar')  loadGrammar();
       if (name === 'verbs')    loadVerbs();
