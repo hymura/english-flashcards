@@ -2524,6 +2524,9 @@
 
     const CHAT_OPENERS = {
       free:       "Hi! 😊 I'm here to chat with you in English. What would you like to talk about today?",
+      myweek:     "Hey! It's been a while. How was your week?",
+      oracle:     "Hi, thanks for joining the call today. I've looked at your CV. Could you walk me through your experience as an Oracle consultant?",
+      client:     "Hi, thanks for meeting with me. We've had some issues with the invoice integration this week. What can you tell me about it?",
       smalltalk:  "Hey, nice to meet you! So, how's your day going so far?",
       interview:  "Good morning, thanks for coming in today. To start, could you tell me a little about yourself?",
       restaurant: "Good evening, welcome! Here's the menu. Can I get you something to drink first?",
@@ -2531,6 +2534,9 @@
     };
     const CHAT_SCENARIO_ROLE = {
       free:       "Just have a friendly, natural conversation about any topic the learner brings up.",
+      myweek:     "You are a friendly coworker catching up with the learner. Ask about their week, their work, plans for the weekend, family and hobbies. Follow up on the details they mention.",
+      oracle:     "You are a hiring manager interviewing the learner for an Oracle Technical Consultant position (Oracle Fusion Cloud, integrations with OIC, PL/SQL, reports). Ask ONE question at a time: experience, past projects, a hard technical problem they solved, working with clients and teams, why they want the job. React briefly to each answer and ask natural follow-up questions, like a real interview.",
+      client:     "You are a client (a finance manager) in a meeting with the learner, who is your Oracle consultant. You have a real problem: invoices are not syncing correctly through an integration. Ask what happened, why, how long the fix will take and what the next steps are. Sometimes push back politely or ask for clarification, like a real client.",
       smalltalk:  "You are making small talk, like meeting someone new at an event. Ask about their life, work, hobbies.",
       interview:  "You are a friendly job interviewer. Ask typical interview questions one at a time and react to the answers.",
       restaurant: "You are a waiter at a restaurant. Help the learner order food and drinks.",
@@ -2552,7 +2558,9 @@
       if (chatFeedback) {
         sys += " If the learner's last message has an English mistake, begin your reply with one short correction line in this exact format: "
           + "'[CORRECT] <the corrected version>' on its own line, then continue the conversation normally. "
-          + "If there is no mistake, do not add the correction line.";
+          + "If there is no mistake, do not add the correction line. "
+          + "The learner often SPEAKS (their message is transcribed audio): ignore punctuation, capitalization "
+          + "and small transcription noise. Only correct real grammar or word-choice mistakes.";
       }
       // Iter B.7 · pedir evaluación pedagógica estructurada al final del mismo mensaje.
       // Reduce a la mitad las llamadas a Groq (antes: chat + evaluator = 2 requests).
@@ -2589,6 +2597,8 @@
       chatHistory.push({ role: 'assistant', content: opener });
       renderChat();
       document.getElementById('chat-input').value = '';
+      // En modo voz la conversación nueva arranca hablando
+      if (chatVoice) { chatVoiceRun++; voiceStopCapture(); voiceSpeakThenListen(opener); }
     }
 
     // Iter B.8 · toggle único "🎓 Feedback" (correction inline + panel evaluación + evidencia Core)
@@ -2766,12 +2776,14 @@ U15: 55=Añadir · 56=Contrastar · 57=Causa/efecto · 58=Tiempo · 59=Ilustrar 
       if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendChat(); }
     }
 
-    async function sendChat() {
+    // voiceText: texto ya transcrito por el modo voz (si no, se toma del input)
+    async function sendChat(voiceText) {
       if (chatBusy) return;
       const input = document.getElementById('chat-input');
-      const text = input.value.trim();
+      const fromVoice = typeof voiceText === 'string';
+      const text = fromVoice ? voiceText.trim() : input.value.trim();
       if (!text) return;
-      input.value = ''; autoGrowChat(input);
+      if (!fromVoice) { input.value = ''; autoGrowChat(input); }
       const userIdx = chatHistory.length;
       chatHistory.push({ role: 'user', content: text, evaluation: chatFeedback ? 'pending' : undefined });
       renderChat(true);
@@ -2779,7 +2791,10 @@ U15: 55=Añadir · 56=Contrastar · 57=Causa/efecto · 58=Tiempo · 59=Ilustrar 
       document.getElementById('chat-send').disabled = true;
 
       try {
-        const messages = [{ role: 'system', content: buildChatSystem() }].concat(chatHistory);
+        // Groq rechaza propiedades extra en los mensajes (p. ej. 'evaluation' → 502), así que
+        // se envía solo role/content y se omiten los avisos de error que no son de la conversación.
+        const messages = [{ role: 'system', content: buildChatSystem() }].concat(
+          chatHistory.filter(m => !m.error).map(m => ({ role: m.role, content: m.content })));
         const { data, error } = await invokeChatWithRetry({ messages });
         if (error) throw new Error(error.message || 'Error en el chat');
         let reply = (data && data.reply ? data.reply : '').trim();
@@ -2798,9 +2813,10 @@ U15: 55=Añadir · 56=Contrastar · 57=Causa/efecto · 58=Tiempo · 59=Ilustrar 
 
         chatHistory.push({ role: 'assistant', content: reply });
         renderChat();
-        // Leer la respuesta en voz alta (sin la línea de corrección)
-        const spoken = reply.replace(/\[CORRECT\]\s*.+/i, '').trim();
-        speakEnglish(spoken);
+        // Leer la respuesta en voz alta. En modo voz también se lee la corrección y luego
+        // se vuelve a escuchar al usuario; fuera de él, solo la respuesta.
+        if (chatVoice) voiceSpeakThenListen(chatSpokenText(reply, true));
+        else speakEnglish(chatSpokenText(reply, false));
 
         // Iter B.7 · si la evaluación tiene conceptos U8/U14/U15, dispara evidence al Core
         if (evaluation && LC.enabled) {
@@ -2816,12 +2832,13 @@ U15: 55=Añadir · 56=Contrastar · 57=Causa/efecto · 58=Tiempo · 59=Ilustrar 
         const friendly = isRate
           ? '⚠️ El servicio de IA está sobrecargado ahora. Espera unos segundos y envía otra vez.'
           : '⚠️ ' + raw;
-        chatHistory.push({ role: 'assistant', content: friendly });
+        chatHistory.push({ role: 'assistant', content: friendly, error: true });
         renderChat();
         if (chatFeedback && chatHistory[userIdx]) {
           chatHistory[userIdx].evaluation = null;
           renderChat();
         }
+        if (chatVoice) voicePause(isRate ? 'La IA está ocupada. Espera unos segundos.' : 'Hubo un error.');
       } finally {
         chatBusy = false;
         document.getElementById('chat-send').disabled = false;
@@ -2891,6 +2908,268 @@ U15: 55=Añadir · 56=Contrastar · 57=Causa/efecto · 58=Tiempo · 59=Ilustrar 
       if (btn) btn.classList.remove('listening');
       if (chatRecog)    { try { chatRecog.stop(); } catch (e) {} chatRecog = null; }
       if (chatRecorder && chatRecorder.state !== 'inactive') { try { chatRecorder.stop(); } catch (e) {} }
+    }
+
+    // ── C1 · Modo voz manos libres ────────────────────────────────
+    // Ciclo: la IA habla → el micrófono se abre solo → hablas → tras una pausa se envía solo → repite.
+    // PC: Web Speech continuo + temporizador de silencio. Móvil: graba, detecta el silencio por
+    // volumen y transcribe con Whisper. El botón grande siempre permite saltar / enviar ya / reanudar.
+    const CHAT_VOICE_SILENCE_MS   = 2000;   // pausa que cierra tu turno
+    const CHAT_VOICE_NO_SPEECH_MS = 15000;  // sin hablar → el ciclo se pausa
+    const CHAT_VOICE_MAX_TURN_MS  = 60000;  // tope de un turno
+    let chatVoice = false;
+    let chatVoiceState = 'off';             // off | speaking | listening | thinking | paused
+    let chatVoiceRun = 0;                   // token: invalida callbacks de un turno ya cancelado
+    let chatVoiceRec = null, chatVoiceRecorder = null, chatVoiceStream = null, chatVoiceSrc = null;
+    let chatVoiceCtx = null, chatVoiceTimer = null, chatVoiceVad = null;
+    let chatVoiceText = '', chatVoiceDiscard = false;
+
+    function toggleChatVoice() { chatVoice ? stopChatVoice() : startChatVoice(); }
+
+    function startChatVoice() {
+      stopChatMic();
+      chatVoice = true;
+      chatVoiceRun++;
+      // Se preparan audio y voz dentro del toque del usuario (iOS lo exige)
+      if (useCloudSTT() && !chatVoiceCtx) {
+        try { chatVoiceCtx = new (window.AudioContext || window.webkitAudioContext)(); } catch (e) {}
+      }
+      try { const u = new SpeechSynthesisUtterance(' '); u.volume = 0; window.speechSynthesis.speak(u); } catch (e) {}
+      document.getElementById('view-chat').classList.add('voice-on');
+      document.getElementById('chat-voice-toggle').classList.add('on');
+      const last = chatHistory[chatHistory.length - 1];
+      if (chatBusy) setVoiceState('thinking');   // la respuesta en curso se leerá al llegar
+      else if (last && last.role === 'assistant' && !last.error) voiceSpeakThenListen(chatSpokenText(last.content, true));
+      else voiceListen();
+    }
+
+    function stopChatVoice() {
+      if (!chatVoice && chatVoiceState === 'off') return;
+      chatVoice = false;
+      chatVoiceRun++;
+      voiceStopCapture();
+      if ('speechSynthesis' in window) window.speechSynthesis.cancel();
+      setVoiceState('off');
+      document.getElementById('view-chat').classList.remove('voice-on');
+      document.getElementById('chat-voice-toggle').classList.remove('on');
+    }
+
+    // Botón grande: según el estado salta la voz de la IA, envía ya o reanuda
+    function chatVoiceTap() {
+      if (chatVoiceState === 'speaking')  window.speechSynthesis.cancel();   // resuelve el habla → escucha
+      else if (chatVoiceState === 'listening') voiceFinishTurn();
+      else if (chatVoiceState === 'paused')    voiceListen();
+    }
+
+    // Texto a leer de una respuesta de la IA; con corrección, primero "Better: …"
+    function chatSpokenText(content, withCorrection) {
+      const cm = (content || '').match(/\[CORRECT\]\s*(.+)/i);
+      const reply = (content || '').replace(/\[CORRECT\]\s*.+/i, '').trim();
+      return (withCorrection && cm) ? 'Better: ' + cm[1].trim().replace(/[.!?]+$/, '') + '. ' + reply : reply;
+    }
+
+    // Habla y resuelve al terminar (con tope: Chrome a veces no dispara onend)
+    function chatSpeakAsync(text) {
+      return new Promise(async resolve => {
+        if (!('speechSynthesis' in window) || !text) return resolve();
+        window.speechSynthesis.cancel();
+        if (!cachedEngVoice) cachedEngVoice = await getEnglishVoice();
+        const u = new SpeechSynthesisUtterance(text);
+        u.lang = 'en-US'; u.rate = 0.9; u.pitch = 1;
+        if (cachedEngVoice) u.voice = cachedEngVoice;
+        let done = false, guard = null;
+        const finish = () => { if (done) return; done = true; clearTimeout(guard); resolve(); };
+        guard = setTimeout(finish, 3000 + text.split(/\s+/).length * 450);
+        u.onend = finish; u.onerror = finish;
+        window.speechSynthesis.speak(u);
+      });
+    }
+
+    async function voiceSpeakThenListen(text) {
+      const run = chatVoiceRun;
+      setVoiceState('speaking');
+      await chatSpeakAsync(text);
+      if (run !== chatVoiceRun || !chatVoice) return;
+      voiceListen();
+    }
+
+    function voiceListen() {
+      if (!chatVoice) return;
+      chatVoiceRun++;
+      voiceStopCapture();
+      chatVoiceText = ''; chatVoiceDiscard = false;
+      setVoiceState('listening');
+      setVoiceLive('Habla cuando quieras…');
+      if (useCloudSTT()) voiceListenCloud(); else voiceListenWeb();
+    }
+
+    function voicePause(msg) {
+      chatVoiceRun++;
+      voiceStopCapture();
+      if (chatVoice) setVoiceState('paused', msg);
+    }
+
+    // Cierra tu turno: lo dicho hasta ahora se envía
+    function voiceFinishTurn() {
+      if (chatVoiceState !== 'listening') return;
+      clearTimeout(chatVoiceTimer); clearInterval(chatVoiceVad);
+      setVoiceState('thinking', 'Procesando…');
+      if (chatVoiceRec) { try { chatVoiceRec.stop(); } catch (e) {} }                 // → onend envía
+      else if (chatVoiceRecorder && chatVoiceRecorder.state !== 'inactive') chatVoiceRecorder.stop(); // → onstop transcribe
+    }
+
+    // Si la petición anterior sigue abierta (p. ej. registrando la evaluación), espera a que termine
+    async function voiceSendTurn(text) {
+      setVoiceState('thinking');
+      const run = chatVoiceRun;
+      while (chatBusy) {
+        await new Promise(r => setTimeout(r, 150));
+        if (run !== chatVoiceRun) return;
+      }
+      sendChat(text);
+    }
+
+    // Suelta micrófono y temporizadores (sus callbacks ya quedaron invalidados por chatVoiceRun)
+    function voiceStopCapture() {
+      clearTimeout(chatVoiceTimer); clearInterval(chatVoiceVad);
+      if (chatVoiceRec) { try { chatVoiceRec.abort(); } catch (e) {} chatVoiceRec = null; }
+      if (chatVoiceRecorder && chatVoiceRecorder.state !== 'inactive') { try { chatVoiceRecorder.stop(); } catch (e) {} }
+      chatVoiceRecorder = null;
+      voiceReleaseStream();
+    }
+
+    function voiceReleaseStream() {
+      if (chatVoiceSrc)    { try { chatVoiceSrc.disconnect(); } catch (e) {} chatVoiceSrc = null; }
+      if (chatVoiceStream) { chatVoiceStream.getTracks().forEach(t => t.stop()); chatVoiceStream = null; }
+    }
+
+    // PC (Chrome/Edge): reconocimiento continuo; 2 s sin resultados nuevos = fin del turno
+    function voiceListenWeb() {
+      const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+      if (!SR) { voicePause('Tu navegador no soporta voz. Usa Chrome o Edge.'); return; }
+      const run = chatVoiceRun;
+      const rec = new SR();
+      rec.lang = 'en-US'; rec.continuous = true; rec.interimResults = true;
+      let lastError = '';
+      rec.onresult = e => {
+        if (run !== chatVoiceRun) return;
+        let text = '';
+        for (let i = 0; i < e.results.length; i++) text += e.results[i][0].transcript + ' ';
+        chatVoiceText = text.replace(/\s+/g, ' ').trim();
+        setVoiceLive('“' + chatVoiceText + '”');
+        if (chatVoiceState !== 'listening') return;
+        clearTimeout(chatVoiceTimer);
+        chatVoiceTimer = setTimeout(voiceFinishTurn, CHAT_VOICE_SILENCE_MS);
+      };
+      rec.onerror = e => { lastError = e.error; };
+      rec.onend = () => {
+        if (run !== chatVoiceRun) return;
+        chatVoiceRec = null;
+        if (chatVoiceText) voiceSendTurn(chatVoiceText);
+        else voicePause(lastError === 'not-allowed' ? 'Permite el micrófono en el navegador.' : 'No te escuché.');
+      };
+      chatVoiceRec = rec;
+      try { rec.start(); } catch (e) { voicePause('No pude abrir el micrófono.'); return; }
+      chatVoiceTimer = setTimeout(() => { if (!chatVoiceText) voicePause('No te escuché.'); }, CHAT_VOICE_NO_SPEECH_MS);
+    }
+
+    // Móvil: graba, detecta voz/silencio por volumen y transcribe con la Edge Function `transcribe`
+    async function voiceListenCloud() {
+      const run = chatVoiceRun;
+      let stream;
+      try { stream = await navigator.mediaDevices.getUserMedia({ audio: true }); }
+      catch (e) { voicePause('No pude acceder al micrófono. Revisa los permisos.'); return; }
+      if (run !== chatVoiceRun) { stream.getTracks().forEach(t => t.stop()); return; }
+      chatVoiceStream = stream;
+
+      let opts = {};
+      if (window.MediaRecorder && MediaRecorder.isTypeSupported) {
+        if (MediaRecorder.isTypeSupported('audio/webm'))     opts = { mimeType: 'audio/webm' };
+        else if (MediaRecorder.isTypeSupported('audio/mp4')) opts = { mimeType: 'audio/mp4' };
+      }
+      let recorder;
+      try { recorder = new MediaRecorder(stream, opts); } catch (e) { recorder = new MediaRecorder(stream); }
+      const chunks = [];
+      recorder.ondataavailable = e => { if (e.data && e.data.size > 0) chunks.push(e.data); };
+      recorder.onstop = async () => {
+        // Suelta SOLO el micrófono de este turno (un turno nuevo pudo abrir otro ya)
+        stream.getTracks().forEach(t => t.stop());
+        if (chatVoiceStream === stream) voiceReleaseStream();
+        if (run !== chatVoiceRun) return;
+        if (chatVoiceDiscard) { voicePause('No te escuché.'); return; }
+        const type = (chunks[0] && chunks[0].type) || 'audio/webm';
+        const blob = new Blob(chunks, { type });
+        if (blob.size < 1200) { voicePause('No te escuché.'); return; }
+        setVoiceState('thinking', 'Transcribiendo…');
+        let said = '';
+        try {
+          const form = new FormData();
+          form.append('file', blob, 'audio.' + (type.includes('mp4') ? 'mp4' : 'webm'));
+          form.append('language', 'en');
+          const { data, error } = await sb.functions.invoke('transcribe', { body: form });
+          if (error) throw new Error(error.message);
+          said = (data && data.text ? data.text : '').trim();
+        } catch (e) { if (run === chatVoiceRun) voicePause('Error al transcribir.'); return; }
+        if (run !== chatVoiceRun) return;
+        if (!said) { voicePause('No entendí lo que dijiste.'); return; }
+        setVoiceLive('“' + said + '”');
+        voiceSendTurn(said);
+      };
+      chatVoiceRecorder = recorder;
+      recorder.start(250);
+
+      // Detector de voz por volumen (RMS) con piso de ruido calibrado al inicio del turno
+      let analyser = null, buf = null;
+      try {
+        if (chatVoiceCtx) {
+          if (chatVoiceCtx.state === 'suspended') chatVoiceCtx.resume();
+          chatVoiceSrc = chatVoiceCtx.createMediaStreamSource(stream);
+          analyser = chatVoiceCtx.createAnalyser(); analyser.fftSize = 1024;
+          chatVoiceSrc.connect(analyser); buf = new Float32Array(analyser.fftSize);
+        }
+      } catch (e) { analyser = null; }
+      const started = Date.now();
+      let heard = false, lastLoud = started, floor = null;
+      chatVoiceVad = setInterval(() => {
+        if (run !== chatVoiceRun) { clearInterval(chatVoiceVad); return; }
+        const now = Date.now();
+        if (analyser) {
+          analyser.getFloatTimeDomainData(buf);
+          let sum = 0; for (let i = 0; i < buf.length; i++) sum += buf[i] * buf[i];
+          const rms = Math.sqrt(sum / buf.length);
+          if (now - started < 500) floor = floor === null ? rms : Math.min(floor, rms);
+          const thr = Math.max(0.015, (floor || 0) * 3);
+          if (now - started >= 500 && rms > thr) { heard = true; lastLoud = now; }
+        }
+        const secs = Math.round((now - started) / 1000);
+        setVoiceLive(heard ? '🔴 Grabando… ' + secs + ' s' : 'Habla cuando quieras…');
+        if (heard && now - lastLoud > CHAT_VOICE_SILENCE_MS) voiceFinishTurn();
+        else if (analyser && !heard && now - started > CHAT_VOICE_NO_SPEECH_MS) { chatVoiceDiscard = true; voiceFinishTurn(); }
+        else if (now - started > CHAT_VOICE_MAX_TURN_MS) voiceFinishTurn();
+      }, 100);
+    }
+
+    function setVoiceState(state, msg) {
+      chatVoiceState = state;
+      const btn = document.getElementById('chat-voice-btn');
+      if (!btn) return;
+      btn.className = 'chat-voice-btn state-' + state;
+      btn.disabled = state === 'thinking';
+      const L = {
+        speaking:  ['🔊 Escucha…',            'Toca el botón para saltar y hablar ya'],
+        listening: ['🎤 Te escucho',           'Haz una pausa y se envía sola · toca para enviar ya'],
+        thinking:  [msg || '⏳ Pensando…',     ''],
+        paused:    ['⏸️ ' + (msg || 'En pausa'), 'Toca el micrófono para hablar'],
+        off:       ['🎙️ Modo voz',             ''],
+      }[state] || ['', ''];
+      document.getElementById('chat-voice-status').textContent = L[0];
+      document.getElementById('chat-voice-sub').textContent    = L[1];
+      if (state !== 'listening' && state !== 'thinking') setVoiceLive('');
+    }
+
+    function setVoiceLive(text) {
+      const el = document.getElementById('chat-voice-live');
+      if (el) el.textContent = text || '';
     }
 
     // ╔══════════════════════════════════════════════════════════╗
@@ -3891,7 +4170,7 @@ U15: 55=Añadir · 56=Contrastar · 57=Causa/efecto · 58=Tiempo · 59=Ilustrar 
       document.getElementById('view-dict').classList.toggle('hidden', name !== 'dict');
       if (name !== 'shadow')   stopShadowMic();
       if (name !== 'lab')      stopLabMic();
-      if (name !== 'chat')     stopChatMic();
+      if (name !== 'chat')     { stopChatMic(); stopChatVoice(); }
       if (name !== 'dict')     stopDictMic();
       if (name !== 'patterns') { stopPatternMic(); stopWriteMic(); }
       if (name !== 'verbs')    stopRvMic();

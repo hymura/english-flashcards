@@ -1302,6 +1302,33 @@
     .chat-mic.listening { background: rgba(239,68,68,0.4); color: #fff; animation: pulse-red 0.6s ease-in-out infinite alternate; }
     .chat-hint { font-size: 0.72rem; color: var(--text-muted); text-align: center; margin-top: 0.4rem; }
 
+    /* C1 · Modo voz manos libres: la barra sustituye a la fila de escribir */
+    .chat-voice-toggle { color: #c4b5fd; border-color: rgba(168,85,247,0.4); font-weight: 700; }
+    .chat-voice-toggle.on { color: #fff; background: linear-gradient(135deg,#7c3aed,#a855f7); border-color: transparent; }
+    .chat-voice-bar { display: none; align-items: center; gap: 0.9rem; background: #12122a; border: 1px solid rgba(168,85,247,0.35); border-radius: 16px; padding: 0.75rem 0.9rem; }
+    #view-chat.voice-on .chat-voice-bar { display: flex; }
+    #view-chat.voice-on .chat-input-row,
+    #view-chat.voice-on .chat-hint { display: none; }
+    .chat-voice-btn {
+      width: 64px; height: 64px; border-radius: 50%; flex-shrink: 0; border: none; cursor: pointer;
+      display: flex; align-items: center; justify-content: center; transition: all 0.2s ease;
+      background: rgba(239,68,68,0.15); color: #f87171; border: 1px solid rgba(239,68,68,0.35);
+    }
+    .chat-voice-btn.state-listening { background: rgba(239,68,68,0.45); color: #fff; animation: pulse-red 0.6s ease-in-out infinite alternate; }
+    .chat-voice-btn.state-speaking  { background: rgba(34,211,238,0.15); color: #22d3ee; border-color: rgba(34,211,238,0.4); animation: pulse-cyan 0.8s ease-in-out infinite alternate; }
+    .chat-voice-btn.state-thinking  { background: rgba(168,85,247,0.15); color: #c4b5fd; border-color: rgba(168,85,247,0.35); opacity: 0.7; cursor: default; }
+    .chat-voice-btn.state-paused:hover { background: rgba(239,68,68,0.28); transform: scale(1.05); }
+    .chat-voice-info { flex: 1; min-width: 0; }
+    .chat-voice-status { font-size: 0.95rem; font-weight: 700; color: var(--text); }
+    .chat-voice-sub { font-size: 0.72rem; color: var(--text-muted); margin-top: 0.1rem; }
+    .chat-voice-live { font-size: 0.85rem; color: #e9d5ff; margin-top: 0.3rem; font-style: italic; overflow-wrap: anywhere; max-height: 4.2em; overflow: hidden; }
+    .chat-voice-live:empty { display: none; }
+    .chat-voice-exit {
+      flex-shrink: 0; align-self: flex-start; background: transparent; border: 1px solid var(--border); color: var(--text-muted);
+      border-radius: 10px; padding: 0.35rem 0.6rem; font-size: 0.75rem; font-weight: 600; cursor: pointer;
+    }
+    .chat-voice-exit:hover { color: #f87171; border-color: rgba(239,68,68,0.3); }
+
     /* ── Diccionario ── */
     .dict-search-row { display: flex; gap: 0.5rem; margin-bottom: 1rem; }
     .dict-input {

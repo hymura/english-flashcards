@@ -158,10 +158,17 @@
     <div class="chat-setup">
       <select class="chat-select" id="chat-scenario" onchange="newChat()">
         <option value="free">💬 Charla libre</option>
-        <option value="smalltalk">👋 Conocer a alguien</option>
-        <option value="interview">💼 Entrevista de trabajo</option>
-        <option value="restaurant">🍽️ En un restaurante</option>
-        <option value="travel">✈️ Viajando</option>
+        <optgroup label="Tu vida real">
+          <option value="myweek">📅 Cuéntame tu semana</option>
+          <option value="oracle">🧑‍💻 Entrevista: Oracle consultant</option>
+          <option value="client">🤝 Reunión con un cliente</option>
+        </optgroup>
+        <optgroup label="Situaciones">
+          <option value="smalltalk">👋 Conocer a alguien</option>
+          <option value="interview">💼 Entrevista de trabajo</option>
+          <option value="restaurant">🍽️ En un restaurante</option>
+          <option value="travel">✈️ Viajando</option>
+        </optgroup>
       </select>
       <select class="chat-select" id="chat-level" onchange="newChat()">
         <option value="beginner">🟢 Básico</option>
@@ -169,10 +176,27 @@
         <option value="advanced">🔴 Avanzado</option>
       </select>
       <div class="chat-toggle on" id="chat-feedback-toggle" onclick="toggleChatFeedback()" title="Corrige tus errores y evalúa tu progreso al mismo tiempo">🎓 Feedback</div>
+      <div class="chat-toggle chat-voice-toggle" id="chat-voice-toggle" onclick="toggleChatVoice()" title="Conversa solo con la voz: la IA habla, tú respondes y se envía solo">🎙️ Modo voz</div>
       <button class="btn-chat-new" onclick="newChat()">🔄 Nueva</button>
     </div>
 
     <div class="chat-window" id="chat-window"></div>
+
+    <!-- C1 · Modo voz manos libres (visible solo con #view-chat.voice-on) -->
+    <div class="chat-voice-bar" id="chat-voice-bar">
+      <button class="chat-voice-btn" id="chat-voice-btn" onclick="chatVoiceTap()" aria-label="Hablar">
+        <svg width="28" height="28" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+          <rect x="9" y="2" width="6" height="11" rx="3"/><path d="M5 10a7 7 0 0 0 14 0"/>
+          <line x1="12" y1="19" x2="12" y2="22"/><line x1="9" y1="22" x2="15" y2="22"/>
+        </svg>
+      </button>
+      <div class="chat-voice-info">
+        <div class="chat-voice-status" id="chat-voice-status">🎙️ Modo voz</div>
+        <div class="chat-voice-sub" id="chat-voice-sub"></div>
+        <div class="chat-voice-live" id="chat-voice-live" role="status" aria-live="polite"></div>
+      </div>
+      <button class="chat-voice-exit" onclick="stopChatVoice()" title="Salir del modo voz">✕ Salir</button>
+    </div>
 
     <div class="chat-input-row">
       <textarea class="chat-input" id="chat-input" rows="1" placeholder="Escribe en inglés..." oninput="autoGrowChat(this)" onkeydown="chatKey(event)"></textarea>
@@ -186,7 +210,7 @@
         <svg width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
       </button>
     </div>
-    <div class="chat-hint">✍️ Escribe o 🎤 habla · Enter para enviar · toca 🔊 en las respuestas para oírlas</div>
+    <div class="chat-hint">✍️ Escribe o 🎤 dicta · Enter para enviar · o activa <b>🎙️ Modo voz</b> para conversar sin tocar nada</div>
   </div>
 
   <!-- ── VIEW: Laboratorio de Pronunciación ── -->
