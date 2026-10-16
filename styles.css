@@ -218,6 +218,7 @@
 
     .card-phrase { font-size: 1.5rem; font-weight: 600; line-height: 1.4; color: #f1f5f9; }
     .card-back .card-phrase { font-size: 1.4rem; color: #d1fae5; }
+    .card-phrase.long, .card-back .card-phrase.long { font-size: 1.2rem; }
     .card-description { margin-top: 1rem; font-size: 0.82rem; color: var(--text-muted); font-style: italic; max-width: 380px; }
 
     .card-actions { display: flex; gap: 0.75rem; margin-top: 1.1rem; align-items: center; }
@@ -246,6 +247,17 @@
 
     .flip-hint { font-size: 0.72rem; color: var(--text-muted); margin-top: 0.9rem; display: flex; align-items: center; gap: 0.4rem; }
     .flip-hint svg { opacity: 0.6; }
+
+    /* Dirección de la tarjeta (ES→EN "Dilo" / EN→ES "Entender") */
+    .card-dir { width: 100%; max-width: 560px; display: flex; gap: 0.4rem; padding: 0.3rem; margin-bottom: 1rem; background: #12122a; border: 1px solid var(--border); border-radius: 14px; }
+    .card-dir-btn { flex: 1; display: flex; align-items: center; justify-content: center; gap: 0.45rem; padding: 0.55rem 0.5rem; border: none; border-radius: 10px; background: transparent; color: var(--text-muted); font-size: 0.85rem; font-weight: 700; cursor: pointer; transition: all 0.2s ease; white-space: nowrap; }
+    .card-dir-btn:hover { color: var(--text); background: rgba(124,58,237,0.08); }
+    .card-dir-btn.active { background: linear-gradient(135deg, #7c3aed, #a855f7); color: #fff; box-shadow: 0 4px 14px rgba(124,58,237,0.35); }
+    .card-dir-sub { font-size: 0.68rem; font-weight: 600; opacity: 0.7; letter-spacing: 0.04em; }
+    .card.dir-es-en .card-front .btn-audio { display: none; }
+    .card:not(.dir-es-en) .card-actions-back { display: none; }
+    .card-actions-back { margin-top: 0.9rem; }
+    @media (max-width: 420px) { .card-dir-sub { display: none; } }
 
     /* Pronunciation panel */
     .pronun-panel { width: 100%; max-width: 560px; background: #12122a; border: 1px solid var(--border); border-radius: 16px; padding: 1rem 1.25rem; margin-bottom: 1.25rem; animation: fadeIn 0.3s ease; }

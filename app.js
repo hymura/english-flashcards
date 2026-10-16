@@ -5869,6 +5869,31 @@ U15: 55=Añadir · 56=Contrastar · 57=Causa/efecto · 58=Tiempo · 59=Ilustrar 
       location.reload();
     }
 
+    // Dirección de la tarjeta. 'es-en' (por defecto) = ves el español y la DICES en inglés
+    // (recuperar/producir); 'en-es' = ves el inglés y la entiendes (reconocer).
+    let cardDir = 'es-en';
+    try { if (localStorage.getItem('card_dir') === 'en-es') cardDir = 'en-es'; } catch(e) {}
+
+    function setCardDir(dir) {
+      cardDir = dir === 'en-es' ? 'en-es' : 'es-en';
+      try { localStorage.setItem('card_dir', cardDir); } catch(e) {}
+      if (phrases[current]) showCard(current); else applyCardDirUI();
+    }
+
+    function applyCardDirUI() {
+      const sayMode = cardDir === 'es-en';
+      document.querySelectorAll('.card-dir-btn').forEach(b => b.classList.toggle('active', b.dataset.dir === cardDir));
+      document.getElementById('flashcard').classList.toggle('dir-es-en', sayMode);
+      document.getElementById('card-label-front').textContent = sayMode ? 'Español · dilo en inglés' : 'English';
+      document.getElementById('card-label-back').textContent  = sayMode ? 'English' : 'Spanish';
+      document.getElementById('flip-hint-text').textContent   = sayMode
+        ? 'Dila en voz alta 🎤 y toca para ver la respuesta'
+        : 'Toca la tarjeta para ver la traducción';
+      document.getElementById('btn-again-label').textContent = sayMode ? 'No me salió' : 'No lo sé';
+      document.getElementById('btn-good-label').textContent  = sayMode ? 'Me salió' : 'Lo tengo';
+      document.getElementById('pronun-title').textContent    = sayMode ? '🗣️ ¿La dijiste?' : '🎤 Pronunciation Check';
+    }
+
     function showCard(index) {
       if (index >= phrases.length) {
         document.getElementById('main-content').classList.add('hidden');
@@ -5878,9 +5903,17 @@ U15: 55=Añadir · 56=Contrastar · 57=Causa/efecto · 58=Tiempo · 59=Ilustrar 
       current = index;
       seen.add(index);
       const p = phrases[index];
-      document.getElementById('phrase-text').textContent      = p.phrase;
-      document.getElementById('translation-text').textContent = p.translation;
+      // En modo 'es-en' el frente es el español; si la frase no tiene traducción, se muestra en inglés
+      const sayMode = cardDir === 'es-en' && !!p.translation;
+      const frontEl = document.getElementById('phrase-text');
+      const backEl  = document.getElementById('translation-text');
+      frontEl.textContent = sayMode ? p.translation : p.phrase;
+      backEl.textContent  = sayMode ? p.phrase : p.translation;
+      // Frases largas (≈5 % del banco, sobre todo en español): letra algo menor para que quepan en móvil
+      frontEl.classList.toggle('long', frontEl.textContent.length > 70);
+      backEl.classList.toggle('long', backEl.textContent.length > 70);
       document.getElementById('description-text').textContent = p.description;
+      applyCardDirUI();
       document.getElementById('flashcard').classList.remove('flipped');
       hidePronunPanel();
       reflectMastered(p.id);
@@ -5929,7 +5962,7 @@ U15: 55=Añadir · 56=Contrastar · 57=Causa/efecto · 58=Tiempo · 59=Ilustrar 
         scheduleSrs('phrase', p.id, quality);
         markPhraseStudied(p.id);
         if (LC.enabled) {
-          LC.submitFromPhrase(p.id, quality !== 'again' ? 'pass' : 'fail', 'recognize')
+          LC.submitFromPhrase(p.id, quality !== 'again' ? 'pass' : 'fail', cardDir === 'es-en' ? 'produce' : 'recognize')
             .then(function() { return lcRefreshAndNotify(); })
             .catch(function(e) { console.warn('LC phrase rate:', e.message); });
         }
@@ -5955,6 +5988,8 @@ U15: 55=Añadir · 56=Contrastar · 57=Causa/efecto · 58=Tiempo · 59=Ilustrar 
       if (card.classList.contains('flipped') && phrases[current]) {
         markPhraseStudied(phrases[current].id);
         updateCardProgress();
+        // Modo "Dilo": al revelar la respuesta suena el modelo para comparar
+        if (cardDir === 'es-en') setTimeout(speakPhrase, 350);
       }
     }
     function nextCard()  { if (current < phrases.length - 1) showCard(current + 1); else { document.getElementById('main-content').classList.add('hidden'); document.getElementById('completed').classList.remove('hidden'); } }
@@ -5995,10 +6030,10 @@ U15: 55=Añadir · 56=Contrastar · 57=Causa/efecto · 58=Tiempo · 59=Ilustrar 
 
     async function speakPhrase() {
       if (!('speechSynthesis' in window)) return;
-      const text = document.getElementById('phrase-text').textContent;
+      const text = phrases[current]?.phrase;
       if (!text) return;
       window.speechSynthesis.cancel();
-      const btn = document.getElementById('btn-audio');
+      const btn = document.getElementById(cardDir === 'es-en' ? 'btn-audio-back' : 'btn-audio');
       if (!cachedEngVoice) cachedEngVoice = await getEnglishVoice();
       const utter = new SpeechSynthesisUtterance(text);
       utter.lang  = 'en-US'; utter.rate = 0.88; utter.pitch = 1;
@@ -6113,7 +6148,7 @@ U15: 55=Añadir · 56=Contrastar · 57=Causa/efecto · 58=Tiempo · 59=Ilustrar 
         if (error) throw new Error(error.message || 'Error en la transcripción');
         const said = (data && data.text ? data.text : '').trim();
         if (!said) { showPronunError('No entendí lo que dijiste. Intenta de nuevo 🎤'); return; }
-        const expected = document.getElementById('phrase-text').textContent;
+        const expected = phrases[current]?.phrase || '';
         finishPronun(expected, said, scorePronunciation(expected, said));
       } catch(e) {
         showPronunError('Error transcribiendo: ' + (e.message || e));
@@ -6181,7 +6216,7 @@ U15: 55=Añadir · 56=Contrastar · 57=Causa/efecto · 58=Tiempo · 59=Ilustrar 
       };
 
       recognition.onresult = (e) => {
-        const expected = document.getElementById('phrase-text').textContent;
+        const expected = phrases[current]?.phrase || '';
         let bestResult = e.results[0][0].transcript;
         let bestScore  = scorePronunciation(expected, bestResult);
         for (let i = 1; i < e.results[0].length; i++) {
@@ -6250,11 +6285,21 @@ U15: 55=Añadir · 56=Contrastar · 57=Causa/efecto · 58=Tiempo · 59=Ilustrar 
       });
       document.getElementById('you-said').textContent = said || '—';
       const tip = document.getElementById('pronun-tip');
-      if      (score.pct === 100) tip.textContent = '🏆 ¡Perfecto! Tu pronunciación fue exacta.';
-      else if (score.pct >= 80)   tip.textContent = '✅ ¡Muy bien! Casi perfecto.';
-      else if (score.pct >= 50)   tip.textContent = '💪 Buen intento. Escucha y repite.';
-      else                        tip.textContent = '🔄 Practica más. Escucha primero con 🔊 y luego repite.';
+      if (cardDir === 'es-en') {
+        if      (score.pct === 100) tip.textContent = '🏆 ¡La dijiste completa!';
+        else if (score.pct >= 80)   tip.textContent = '✅ ¡Muy bien! Casi exacta. Compara con el modelo 🔊';
+        else if (score.pct >= 50)   tip.textContent = '💪 Vas cerca. Escucha el modelo y repítela en voz alta.';
+        else                        tip.textContent = '🔄 Escúchala, repítela y vuelve a intentarlo.';
+      } else {
+        if      (score.pct === 100) tip.textContent = '🏆 ¡Perfecto! Tu pronunciación fue exacta.';
+        else if (score.pct >= 80)   tip.textContent = '✅ ¡Muy bien! Casi perfecto.';
+        else if (score.pct >= 50)   tip.textContent = '💪 Buen intento. Escucha y repite.';
+        else                        tip.textContent = '🔄 Practica más. Escucha primero con 🔊 y luego repite.';
+      }
       panel.classList.remove('hidden');
+      // Modo "Dilo": tras intentarlo se revela la respuesta (y suena el modelo vía flipCard)
+      const card = document.getElementById('flashcard');
+      if (cardDir === 'es-en' && !card.classList.contains('flipped')) flipCard();
     }
 
     function showPronunError(msg) {

@@ -392,11 +392,17 @@
       <div class="progress-sub" id="progress-sub"></div>
     </div>
 
+    <!-- Dirección de la tarjeta: ES→EN (producir) o EN→ES (entender) -->
+    <div class="card-dir" id="card-dir">
+      <button class="card-dir-btn" data-dir="es-en" onclick="setCardDir('es-en')">🗣️ Dilo en inglés <span class="card-dir-sub">ES → EN</span></button>
+      <button class="card-dir-btn" data-dir="en-es" onclick="setCardDir('en-es')">👀 Entender <span class="card-dir-sub">EN → ES</span></button>
+    </div>
+
     <div class="scene">
       <div class="card" id="flashcard" onclick="flipCard()">
         <div class="card-face card-front">
           <span class="master-ribbon" id="master-ribbon">✓ DOMINADA</span>
-          <span class="card-label">English</span>
+          <span class="card-label" id="card-label-front">English</span>
           <p class="card-phrase" id="phrase-text"></p>
           <div class="card-actions">
             <button class="btn-audio" id="btn-audio" onclick="event.stopPropagation(); speakPhrase()" title="Listen">
@@ -419,13 +425,22 @@
             <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
               <path d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/>
             </svg>
-            Toca la tarjeta para ver la traducción
+            <span id="flip-hint-text">Toca la tarjeta para ver la traducción</span>
           </div>
         </div>
         <div class="card-face card-back">
-          <span class="card-label">Spanish</span>
+          <span class="card-label" id="card-label-back">Spanish</span>
           <p class="card-phrase" id="translation-text"></p>
           <p class="card-description" id="description-text"></p>
+          <div class="card-actions card-actions-back">
+            <button class="btn-audio" id="btn-audio-back" onclick="event.stopPropagation(); speakPhrase()" title="Escuchar el modelo">
+              <svg width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/>
+                <path d="M15.54 8.46a5 5 0 0 1 0 7.07"/>
+                <path d="M19.07 4.93a10 10 0 0 1 0 14.14"/>
+              </svg>
+            </button>
+          </div>
         </div>
       </div>
     </div>
@@ -434,7 +449,7 @@
 
     <div class="pronun-panel hidden" id="pronun-panel">
       <div class="pronun-header">
-        <span class="pronun-title">🎤 Pronunciation Check</span>
+        <span class="pronun-title" id="pronun-title">🎤 Pronunciation Check</span>
         <span class="score-badge" id="score-badge">—</span>
       </div>
       <div class="word-row" id="word-row"></div>
@@ -445,11 +460,11 @@
     <div class="controls">
       <button class="btn btn-dontknow" onclick="rateCard('again')">
         <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path d="M18 6 6 18M6 6l12 12"/></svg>
-        No lo sé
+        <span id="btn-again-label">No lo sé</span>
       </button>
       <button class="btn btn-know" onclick="rateCard('good')">
         <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5"/></svg>
-        Lo tengo
+        <span id="btn-good-label">Lo tengo</span>
       </button>
       <button class="btn btn-primary" onclick="nextCard()">
         Siguiente
