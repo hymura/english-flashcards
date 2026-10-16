@@ -195,11 +195,15 @@
         <div class="chat-voice-sub" id="chat-voice-sub"></div>
         <div class="chat-voice-live" id="chat-voice-live" role="status" aria-live="polite"></div>
       </div>
-      <button class="chat-voice-exit" onclick="stopChatVoice()" title="Salir del modo voz">✕ Salir</button>
+      <div class="chat-voice-actions">
+        <button class="chat-voice-help" id="chat-voice-help" onclick="chatHelpTap()" title="¿Te trabaste? Dilo en español y te doy la frase en inglés">🆘 ¿Cómo se dice?</button>
+        <button class="chat-voice-exit" onclick="stopChatVoice()" title="Salir del modo voz">✕ Salir</button>
+      </div>
     </div>
 
     <div class="chat-input-row">
       <textarea class="chat-input" id="chat-input" rows="1" placeholder="Escribe en inglés..." oninput="autoGrowChat(this)" onkeydown="chatKey(event)"></textarea>
+      <button class="chat-help" id="chat-help" onclick="chatHelpTap()" title="¿Cómo se dice? Escribe en español y toca aquí">🆘</button>
       <button class="chat-mic" id="chat-mic" onclick="toggleChatMic()" title="Hablar">
         <svg width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
           <rect x="9" y="2" width="6" height="11" rx="3"/><path d="M5 10a7 7 0 0 0 14 0"/>
@@ -210,7 +214,7 @@
         <svg width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
       </button>
     </div>
-    <div class="chat-hint">✍️ Escribe o 🎤 dicta · Enter para enviar · o activa <b>🎙️ Modo voz</b> para conversar sin tocar nada</div>
+    <div class="chat-hint">✍️ Escribe o 🎤 dicta · 🆘 escribe en español si no sabes cómo decirlo · o activa <b>🎙️ Modo voz</b></div>
   </div>
 
   <!-- ── VIEW: Laboratorio de Pronunciación ── -->

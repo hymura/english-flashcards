@@ -1323,11 +1323,43 @@
     .chat-voice-sub { font-size: 0.72rem; color: var(--text-muted); margin-top: 0.1rem; }
     .chat-voice-live { font-size: 0.85rem; color: #e9d5ff; margin-top: 0.3rem; font-style: italic; overflow-wrap: anywhere; max-height: 4.2em; overflow: hidden; }
     .chat-voice-live:empty { display: none; }
+    .chat-voice-actions { flex-shrink: 0; align-self: stretch; display: flex; flex-direction: column; justify-content: space-between; align-items: flex-end; gap: 0.4rem; }
     .chat-voice-exit {
-      flex-shrink: 0; align-self: flex-start; background: transparent; border: 1px solid var(--border); color: var(--text-muted);
+      background: transparent; border: 1px solid var(--border); color: var(--text-muted);
       border-radius: 10px; padding: 0.35rem 0.6rem; font-size: 0.75rem; font-weight: 600; cursor: pointer;
     }
     .chat-voice-exit:hover { color: #f87171; border-color: rgba(239,68,68,0.3); }
+
+    /* C2 · 🆘 "¿Cómo se dice?" */
+    .chat-voice-help, .chat-help {
+      background: rgba(251,191,36,0.12); color: #fbbf24; border: 1px solid rgba(251,191,36,0.4);
+      font-weight: 700; cursor: pointer; transition: all 0.2s;
+    }
+    .chat-voice-help { border-radius: 10px; padding: 0.4rem 0.6rem; font-size: 0.78rem; white-space: nowrap; }
+    .chat-voice-help:hover:not(:disabled), .chat-help:hover:not(:disabled) { background: rgba(251,191,36,0.24); }
+    .chat-voice-help:disabled, .chat-help:disabled { opacity: 0.45; cursor: default; }
+    .chat-help { border-radius: 12px; width: 46px; height: 46px; flex-shrink: 0; font-size: 1.1rem; display: flex; align-items: center; justify-content: center; }
+    .msg-help {
+      align-self: center; width: min(100%, 460px); background: rgba(251,191,36,0.07); border: 1px dashed rgba(251,191,36,0.45);
+      border-radius: 14px; padding: 0.6rem 0.8rem; animation: fadeIn 0.3s ease;
+    }
+    .help-es { font-size: 0.8rem; color: var(--text-muted); font-style: italic; }
+    .help-en { display: flex; align-items: center; justify-content: space-between; gap: 0.5rem; margin-top: 0.3rem; font-size: 1rem; font-weight: 700; color: #fde68a; }
+    .help-foot { display: flex; flex-wrap: wrap; align-items: center; gap: 0.5rem; margin-top: 0.45rem; }
+    .help-foot:empty { display: none; }
+    .help-score { font-size: 0.72rem; font-weight: 700; padding: 0.15rem 0.5rem; border-radius: 99px; }
+    .help-score.ok  { background: rgba(16,185,129,0.14); color: #6ee7b7; border: 1px solid rgba(16,185,129,0.4); }
+    .help-score.try { background: rgba(251,146,60,0.14); color: #fbbf24; border: 1px solid rgba(251,146,60,0.4); }
+    .help-save { background: #1a1a35; border: 1px solid var(--border); color: var(--text); border-radius: 8px; padding: 0.25rem 0.6rem; font-size: 0.75rem; font-weight: 600; cursor: pointer; }
+    .help-save:hover { border-color: rgba(168,85,247,0.5); color: #e9d5ff; }
+    .help-saved { font-size: 0.75rem; font-weight: 700; color: #6ee7b7; }
+    .help-err { font-size: 0.72rem; color: #fca5a5; margin-top: 0.3rem; }
+    /* Celular: 🆘 y Salir pasan a una fila propia para dejar el ancho al texto */
+    @media (max-width: 600px) {
+      .chat-voice-bar { flex-wrap: wrap; row-gap: 0.6rem; }
+      .chat-voice-actions { flex-direction: row; align-items: center; width: 100%; }
+      .chat-voice-help { flex: 1; padding: 0.55rem 0.6rem; font-size: 0.85rem; }
+    }
 
     /* ── Diccionario ── */
     .dict-search-row { display: flex; gap: 0.5rem; margin-bottom: 1rem; }

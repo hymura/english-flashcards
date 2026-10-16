@@ -2592,6 +2592,7 @@
     function newChat() {
       chatStarted = true;
       chatHistory = [];
+      chatHelp = null; chatVoiceMode = 'chat';
       stopChatMic();
       const opener = CHAT_OPENERS[document.getElementById('chat-scenario').value] || CHAT_OPENERS.free;
       chatHistory.push({ role: 'assistant', content: opener });
@@ -2716,6 +2717,21 @@ U15: 55=Añadir · 56=Contrastar · 57=Causa/efecto · 58=Tiempo · 59=Ilustrar 
       const win = document.getElementById('chat-window');
       const spk = t => (t || '').replace(/'/g, "\\'").replace(/"/g, '&quot;');
       let html = chatHistory.map((m, i) => {
+        if (m.role === 'help') {
+          // Tarjeta 🆘: lo que querías decir → la frase en inglés (+ tu repetición y guardar)
+          const scoreHtml = m.score == null ? ''
+            : `<span class="help-score ${m.score >= 70 ? 'ok' : 'try'}">${m.score >= 70 ? '✓ ' : ''}La dijiste ${m.score}%</span>`;
+          const saveHtml = !currentUser ? ''
+            : m.saved ? `<span class="help-saved">✓ En Mis frases</span>`
+            : `<button class="help-save" onclick="saveHelpPhrase(${i})">➕ Guardar para practicar</button>`;
+          const errHtml = m.saveErr ? `<div class="help-err">No pude guardar: ${escapeHtml(m.saveErr)}</div>` : '';
+          return `<div class="msg-help">
+                    <div class="help-es">🆘 “${escapeHtml(m.es)}”</div>
+                    <div class="help-en"><span>${escapeHtml(m.en)}</span>
+                      <button class="msg-speak" onclick="speakEnglish('${spk(m.en)}', this)">🔊</button></div>
+                    <div class="help-foot">${scoreHtml}${saveHtml}</div>${errHtml}
+                  </div>`;
+        }
         if (m.role === 'user') {
           // Iter B.2: chip + panel de evaluación si el mensaje tiene evaluation
           let evalHtml = '';
@@ -2792,9 +2808,10 @@ U15: 55=Añadir · 56=Contrastar · 57=Causa/efecto · 58=Tiempo · 59=Ilustrar 
 
       try {
         // Groq rechaza propiedades extra en los mensajes (p. ej. 'evaluation' → 502), así que
-        // se envía solo role/content y se omiten los avisos de error que no son de la conversación.
+        // se envía solo role/content y se omiten los avisos de error y las tarjetas 🆘.
         const messages = [{ role: 'system', content: buildChatSystem() }].concat(
-          chatHistory.filter(m => !m.error).map(m => ({ role: m.role, content: m.content })));
+          chatHistory.filter(m => (m.role === 'user' || m.role === 'assistant') && !m.error)
+                     .map(m => ({ role: m.role, content: m.content })));
         const { data, error } = await invokeChatWithRetry({ messages });
         if (error) throw new Error(error.message || 'Error en el chat');
         let reply = (data && data.reply ? data.reply : '').trim();
@@ -2923,6 +2940,10 @@ U15: 55=Añadir · 56=Contrastar · 57=Causa/efecto · 58=Tiempo · 59=Ilustrar 
     let chatVoiceRec = null, chatVoiceRecorder = null, chatVoiceStream = null, chatVoiceSrc = null;
     let chatVoiceCtx = null, chatVoiceTimer = null, chatVoiceVad = null;
     let chatVoiceText = '', chatVoiceDiscard = false;
+    // Qué se está escuchando: 'chat' (tu turno) · 'help-es' (🆘: lo que quieres decir, en español)
+    // · 'help-repeat' (🆘: repites la frase en inglés que te dio la IA)
+    let chatVoiceMode = 'chat';
+    let chatHelp = null;                    // { idx, en, tries } mientras dura un 🆘
 
     function toggleChatVoice() { chatVoice ? stopChatVoice() : startChatVoice(); }
 
@@ -2947,6 +2968,7 @@ U15: 55=Añadir · 56=Contrastar · 57=Causa/efecto · 58=Tiempo · 59=Ilustrar 
       if (!chatVoice && chatVoiceState === 'off') return;
       chatVoice = false;
       chatVoiceRun++;
+      chatVoiceMode = 'chat'; chatHelp = null;
       voiceStopCapture();
       if ('speechSynthesis' in window) window.speechSynthesis.cancel();
       setVoiceState('off');
@@ -2958,7 +2980,7 @@ U15: 55=Añadir · 56=Contrastar · 57=Causa/efecto · 58=Tiempo · 59=Ilustrar 
     function chatVoiceTap() {
       if (chatVoiceState === 'speaking')  window.speechSynthesis.cancel();   // resuelve el habla → escucha
       else if (chatVoiceState === 'listening') voiceFinishTurn();
-      else if (chatVoiceState === 'paused')    voiceListen();
+      else if (chatVoiceState === 'paused')    voiceListen(chatVoiceMode);   // reanuda en el mismo paso
     }
 
     // Texto a leer de una respuesta de la IA; con corrección, primero "Better: …"
@@ -2985,18 +3007,19 @@ U15: 55=Añadir · 56=Contrastar · 57=Causa/efecto · 58=Tiempo · 59=Ilustrar 
       });
     }
 
-    async function voiceSpeakThenListen(text) {
+    async function voiceSpeakThenListen(text, mode) {
       const run = chatVoiceRun;
       setVoiceState('speaking');
       await chatSpeakAsync(text);
       if (run !== chatVoiceRun || !chatVoice) return;
-      voiceListen();
+      voiceListen(mode);
     }
 
-    function voiceListen() {
+    function voiceListen(mode) {
       if (!chatVoice) return;
       chatVoiceRun++;
       voiceStopCapture();
+      chatVoiceMode = mode || 'chat';
       chatVoiceText = ''; chatVoiceDiscard = false;
       setVoiceState('listening');
       setVoiceLive('Habla cuando quieras…');
@@ -3016,6 +3039,13 @@ U15: 55=Añadir · 56=Contrastar · 57=Causa/efecto · 58=Tiempo · 59=Ilustrar 
       setVoiceState('thinking', 'Procesando…');
       if (chatVoiceRec) { try { chatVoiceRec.stop(); } catch (e) {} }                 // → onend envía
       else if (chatVoiceRecorder && chatVoiceRecorder.state !== 'inactive') chatVoiceRecorder.stop(); // → onstop transcribe
+    }
+
+    // Lo que se oyó va a tu turno de conversación o al paso del 🆘 en curso
+    function voiceGotText(text, mode) {
+      if (mode === 'help-es')          helpTranslate(text);
+      else if (mode === 'help-repeat') helpCheckRepeat(text);
+      else                             voiceSendTurn(text);
     }
 
     // Si la petición anterior sigue abierta (p. ej. registrando la evaluación), espera a que termine
@@ -3047,9 +3077,9 @@ U15: 55=Añadir · 56=Contrastar · 57=Causa/efecto · 58=Tiempo · 59=Ilustrar 
     function voiceListenWeb() {
       const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
       if (!SR) { voicePause('Tu navegador no soporta voz. Usa Chrome o Edge.'); return; }
-      const run = chatVoiceRun;
+      const run = chatVoiceRun, mode = chatVoiceMode;
       const rec = new SR();
-      rec.lang = 'en-US'; rec.continuous = true; rec.interimResults = true;
+      rec.lang = mode === 'help-es' ? 'es-ES' : 'en-US'; rec.continuous = true; rec.interimResults = true;
       let lastError = '';
       rec.onresult = e => {
         if (run !== chatVoiceRun) return;
@@ -3065,7 +3095,7 @@ U15: 55=Añadir · 56=Contrastar · 57=Causa/efecto · 58=Tiempo · 59=Ilustrar 
       rec.onend = () => {
         if (run !== chatVoiceRun) return;
         chatVoiceRec = null;
-        if (chatVoiceText) voiceSendTurn(chatVoiceText);
+        if (chatVoiceText) voiceGotText(chatVoiceText, mode);
         else voicePause(lastError === 'not-allowed' ? 'Permite el micrófono en el navegador.' : 'No te escuché.');
       };
       chatVoiceRec = rec;
@@ -3075,7 +3105,7 @@ U15: 55=Añadir · 56=Contrastar · 57=Causa/efecto · 58=Tiempo · 59=Ilustrar 
 
     // Móvil: graba, detecta voz/silencio por volumen y transcribe con la Edge Function `transcribe`
     async function voiceListenCloud() {
-      const run = chatVoiceRun;
+      const run = chatVoiceRun, mode = chatVoiceMode;
       let stream;
       try { stream = await navigator.mediaDevices.getUserMedia({ audio: true }); }
       catch (e) { voicePause('No pude acceder al micrófono. Revisa los permisos.'); return; }
@@ -3105,7 +3135,7 @@ U15: 55=Añadir · 56=Contrastar · 57=Causa/efecto · 58=Tiempo · 59=Ilustrar 
         try {
           const form = new FormData();
           form.append('file', blob, 'audio.' + (type.includes('mp4') ? 'mp4' : 'webm'));
-          form.append('language', 'en');
+          form.append('language', mode === 'help-es' ? 'es' : 'en');
           const { data, error } = await sb.functions.invoke('transcribe', { body: form });
           if (error) throw new Error(error.message);
           said = (data && data.text ? data.text : '').trim();
@@ -3113,7 +3143,7 @@ U15: 55=Añadir · 56=Contrastar · 57=Causa/efecto · 58=Tiempo · 59=Ilustrar 
         if (run !== chatVoiceRun) return;
         if (!said) { voicePause('No entendí lo que dijiste.'); return; }
         setVoiceLive('“' + said + '”');
-        voiceSendTurn(said);
+        voiceGotText(said, mode);
       };
       chatVoiceRecorder = recorder;
       recorder.start(250);
@@ -3155,9 +3185,16 @@ U15: 55=Añadir · 56=Contrastar · 57=Causa/efecto · 58=Tiempo · 59=Ilustrar 
       if (!btn) return;
       btn.className = 'chat-voice-btn state-' + state;
       btn.disabled = state === 'thinking';
+      const helpBtn = document.getElementById('chat-voice-help');
+      if (helpBtn) helpBtn.disabled = state === 'thinking';
+      const listening = {
+        'chat':        ['🎤 Te escucho', 'Haz una pausa y se envía sola · toca para enviar ya'],
+        'help-es':     ['🆘 Dilo en español', 'Lo que quieres decir · haz una pausa al terminar'],
+        'help-repeat': ['🔁 Ahora dila tú en inglés', chatHelp ? '“' + chatHelp.en + '”' : ''],
+      }[chatVoiceMode] || [];
       const L = {
         speaking:  ['🔊 Escucha…',            'Toca el botón para saltar y hablar ya'],
-        listening: ['🎤 Te escucho',           'Haz una pausa y se envía sola · toca para enviar ya'],
+        listening: listening,
         thinking:  [msg || '⏳ Pensando…',     ''],
         paused:    ['⏸️ ' + (msg || 'En pausa'), 'Toca el micrófono para hablar'],
         off:       ['🎙️ Modo voz',             ''],
@@ -3170,6 +3207,100 @@ U15: 55=Añadir · 56=Contrastar · 57=Causa/efecto · 58=Tiempo · 59=Ilustrar 
     function setVoiceLive(text) {
       const el = document.getElementById('chat-voice-live');
       if (el) el.textContent = text || '';
+    }
+
+    // ── C2 · 🆘 "¿Cómo se dice?" ──────────────────────────────────
+    // Cuando te trabas: dices en español lo que quieres decir, la IA te da la frase en inglés
+    // (según lo que te acaban de decir), la repites y, si te sale, se envía como tu turno.
+    // Queda una tarjeta 🆘 en el chat con ➕ para guardarla en "Mis frases" (→ tarjetas Dilo).
+    function chatHelpTap() {
+      if (!chatVoice) { chatHelpText(); return; }
+      if (chatVoiceState === 'thinking') return;
+      chatVoiceRun++;
+      voiceStopCapture();
+      if ('speechSynthesis' in window) window.speechSynthesis.cancel();
+      chatHelp = null;
+      voiceListen('help-es');
+    }
+
+    // Modo escrito: lo que escribiste en español en la caja → frase en inglés
+    async function chatHelpText() {
+      const input = document.getElementById('chat-input');
+      const es = input.value.trim();
+      if (!es) {
+        input.placeholder = 'Escribe en español lo que quieres decir y toca 🆘';
+        input.focus(); return;
+      }
+      const btn = document.getElementById('chat-help');
+      btn.disabled = true;
+      const r = await chatHowToSay(es);
+      btn.disabled = false;
+      if (!r) { input.placeholder = 'No pude traducirlo. Intenta otra vez.'; return; }
+      input.value = ''; autoGrowChat(input);
+      chatHistory.push({ role: 'help', es: r.es, en: r.en });
+      renderChat();
+      speakEnglish(r.en);
+      input.placeholder = 'Ahora dila tú: toca 🎤 y repítela en inglés';
+    }
+
+    // Español → la frase natural en inglés para ESTE momento de la conversación
+    async function chatHowToSay(es) {
+      const lastAi = chatHistory.slice().reverse().find(m => m.role === 'assistant' && !m.error);
+      const level = document.getElementById('chat-level').value;
+      const sys = 'You help a Spanish-speaking English learner during a live conversation. '
+        + 'They tell you in Spanish what they want to say next. Give the natural English sentence '
+        + 'a native speaker would say in this context, ready to say out loud. ' + (CHAT_LEVEL[level] || '') + ' '
+        + 'Reply with ONLY a JSON object like {"en":"the English sentence","es":"what they meant, in clean Spanish"}. No extra text.';
+      const user = (lastAi ? 'The other person just said: "' + chatSpokenText(lastAi.content, false) + '"\n' : '')
+        + 'What I want to say (in Spanish): "' + es + '"';
+      try {
+        const { data, error } = await invokeChatWithRetry({ messages: [
+          { role: 'system', content: sys }, { role: 'user', content: user }
+        ] });
+        if (error || !data || !data.reply) return null;
+        const txt = data.reply.trim().replace(/```json|```/g, '').trim();
+        const m = txt.match(/\{[\s\S]*\}/);
+        const obj = JSON.parse(m ? m[0] : txt);
+        const en = (obj.en || '').trim();
+        return en ? { en, es: (obj.es || es).trim() } : null;
+      } catch (e) { console.warn('chatHowToSay:', e.message); return null; }
+    }
+
+    async function helpTranslate(es) {
+      const run = chatVoiceRun;
+      setVoiceState('thinking', '🆘 Buscando cómo se dice…');
+      const r = await chatHowToSay(es);
+      if (run !== chatVoiceRun || !chatVoice) return;
+      if (!r) { chatVoiceMode = 'chat'; voicePause('No pude traducirlo. Toca 🆘 para intentar otra vez.'); return; }
+      chatHistory.push({ role: 'help', es: r.es, en: r.en });
+      chatHelp = { idx: chatHistory.length - 1, en: r.en, tries: 0 };
+      renderChat();
+      voiceSpeakThenListen(r.en, 'help-repeat');
+    }
+
+    // Tu repetición: ≥70 % se envía como tu turno; si no, otro intento; al 2.º se envía lo que dijiste
+    function helpCheckRepeat(said) {
+      const h = chatHelp;
+      if (!h) { voiceSendTurn(said); return; }
+      const score = scorePronunciation(h.en, said);
+      h.tries++;
+      const item = chatHistory[h.idx];
+      if (item) { item.said = said; item.score = score.pct; renderChat(); }
+      if (score.pct >= 70 || h.tries >= 2) {
+        chatHelp = null; chatVoiceMode = 'chat';
+        voiceSendTurn(said);
+      } else {
+        voiceSpeakThenListen('Almost. Try again. ' + h.en, 'help-repeat');
+      }
+    }
+
+    async function saveHelpPhrase(i) {
+      const m = chatHistory[i];
+      if (!m || m.role !== 'help' || m.saved || !currentUser) return;
+      const r = await insertMyPhrase(m.en, m.es);
+      if (r.ok || r.dup) { m.saved = true; m.saveErr = null; }
+      else m.saveErr = r.error;
+      renderChat();
     }
 
     // ╔══════════════════════════════════════════════════════════╗
@@ -3380,7 +3511,7 @@ U15: 55=Añadir · 56=Contrastar · 57=Causa/efecto · 58=Tiempo · 59=Ilustrar 
 
         // Agregar en memoria para que aparezca sin recargar
         allPhrases.push({ id: newId, phrase: word, translation, description: dictCurrent.ipa || '', category: 'Mi vocabulario' });
-        loadCategories();
+        loadCategories(true);
         btn.textContent = '✓ Guardada'; btn.classList.add('saved');
         showDictToast('✓ "' + word + '" → "' + translation + '" guardada. La verás en Tarjetas y Shadowing (categoría "Mi vocabulario").');
       } catch (e) {
@@ -3449,20 +3580,26 @@ U15: 55=Añadir · 56=Contrastar · 57=Causa/efecto · 58=Tiempo · 59=Ilustrar 
       }
     }
 
-    async function saveNewPhrase() {
-      const en = document.getElementById('addp-en').value.trim();
-      const es = document.getElementById('addp-es').value.trim();
-      if (!en || !es) { setAddMsg('Faltan el inglés o el español.', 'err'); return; }
-      if (allPhrases.some(p => (p.phrase || '').toLowerCase() === en.toLowerCase())) {
-        setAddMsg('Ya tienes esa frase guardada. 👍', 'ok'); return;
-      }
+    // Inserta una frase propia en "Mis frases" (→ tarjetas, shadowing, SRS). Usada por "+" y por 🆘.
+    async function insertMyPhrase(en, es) {
+      if (allPhrases.some(p => (p.phrase || '').toLowerCase() === en.toLowerCase())) return { dup: true };
       const newId = Math.max(0, ...allPhrases.map(p => p.id || 0)) + 1;
       const { error } = await sb.from('phrases').insert({
         phrase_id: newId, phrase_name: en, phrase_translation: es, category: 'Mis frases'
       });
-      if (error) { setAddMsg('No pude guardar: ' + error.message, 'err'); return; }
+      if (error) return { error: error.message };
       allPhrases.push({ id: newId, phrase: en, translation: es, description: '', category: 'Mis frases' });
-      loadCategories();
+      loadCategories(true);
+      return { ok: true };
+    }
+
+    async function saveNewPhrase() {
+      const en = document.getElementById('addp-en').value.trim();
+      const es = document.getElementById('addp-es').value.trim();
+      if (!en || !es) { setAddMsg('Faltan el inglés o el español.', 'err'); return; }
+      const r = await insertMyPhrase(en, es);
+      if (r.dup)   { setAddMsg('Ya tienes esa frase guardada. 👍', 'ok'); return; }
+      if (r.error) { setAddMsg('No pude guardar: ' + r.error, 'err'); return; }
       setAddMsg('✓ Guardada: "' + en + '"  →  la verás en Tarjetas y Shadowing (categoría "Mis frases").', 'ok');
       document.getElementById('addp-preview').classList.add('hidden');
       document.getElementById('addp-source').value = '';
@@ -3709,7 +3846,8 @@ U15: 55=Añadir · 56=Contrastar · 57=Causa/efecto · 58=Tiempo · 59=Ilustrar 
     }
 
     // ── Categories (computed from cache) ──────────────────────────
-    function loadCategories() {
+    // refreshOnly: recalcula los conteos sin mostrar la barra (al guardar frases desde otras vistas)
+    function loadCategories(refreshOnly) {
       const counts = {};
       allPhrases.forEach(p => {
         const c = p.category || 'Sin categoría';
@@ -3763,7 +3901,7 @@ U15: 55=Añadir · 56=Contrastar · 57=Causa/efecto · 58=Tiempo · 59=Ilustrar 
       }
 
       bar.innerHTML = html;
-      bar.classList.remove('hidden');
+      if (!refreshOnly) bar.classList.remove('hidden');
     }
 
     function selectCategory(cat, el) {
